@@ -29,7 +29,7 @@ usage() {
     echo "  browser-card-details \"Merchant/ID\" [filter] Get detailed view of a card transaction by merchant or ID"
     echo "  browser-add-delegate \"Name or Email\" [perms...] Add a new expense delegate (permissions: prepare, submit, approve)"
     echo "  browser-remove-delegate \"Name or Email\" Remove an expense delegate"
-    echo "  browser-reconcile \"Name\" [rules.json] Reconcile and submit expense report transactions"
+    echo "  browser-reconcile \"Name\" [rules.json] [--submit] Reconcile expense report transactions (default: review-only, --submit to submit)"
     echo "  browser-attach-receipt \"Name\" \"Merchant\" \"receipt.pdf\" Attach a local receipt file to a report transaction"
     exit 1
 }
@@ -198,14 +198,30 @@ case "$CMD" in
     browser-reconcile)
         if [ $# -lt 2 ]; then
             echo "Error: Please specify the report name to reconcile."
-            echo "Usage: ./run.sh browser-reconcile \"Report Name\" [rules.json]"
+            echo "Usage: ./run.sh browser-reconcile \"Report Name\" [rules.json] [--submit]"
             exit 1
         fi
         ensure_venv
-        if [ $# -ge 3 ]; then
-            python3 src/cli.py --browser-reconcile "$2" --reconcile-rules "$3"
+        REPORT_NAME="$2"
+        RULES_FILE=""
+        SUBMIT_FLAG=""
+        shift 2
+        while [ $# -gt 0 ]; do
+            if [ "$1" = "--submit" ]; then
+                SUBMIT_FLAG="--submit"
+            else
+                RULES_FILE="$1"
+            fi
+            shift
+        done
+        if [ -n "$RULES_FILE" ] && [ -n "$SUBMIT_FLAG" ]; then
+            python3 src/cli.py --browser-reconcile "$REPORT_NAME" --reconcile-rules "$RULES_FILE" --submit
+        elif [ -n "$RULES_FILE" ]; then
+            python3 src/cli.py --browser-reconcile "$REPORT_NAME" --reconcile-rules "$RULES_FILE"
+        elif [ -n "$SUBMIT_FLAG" ]; then
+            python3 src/cli.py --browser-reconcile "$REPORT_NAME" --submit
         else
-            python3 src/cli.py --browser-reconcile "$2"
+            python3 src/cli.py --browser-reconcile "$REPORT_NAME"
         fi
         ;;
     browser-attach-receipt)

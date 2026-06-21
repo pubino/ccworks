@@ -228,27 +228,39 @@ def run_browser_smoke_test():
             headless=True
         )
         
-        recon_rules = {
-            "Uber": {
-                "expense_type": "Ground Transportation",
-                "business_purpose": "Client dinner ride",
-                "comment": "Uber Ride",
-                "allocation_code": "COST-01"
-            },
-            "Office Depot": {
-                "expense_type": "Office Supplies",
-                "business_purpose": "Team materials",
-                "comment": "Pens and notebooks",
-                "allocation_code": "COST-02"
+        # Create a dummy receipt to test attachment during reconciliation
+        dummy_recon_receipt = "tests/dummy_recon_receipt.pdf"
+        with open(dummy_recon_receipt, "w") as f:
+            f.write("RECON MOCK RECEIPT")
+
+        try:
+            recon_rules = {
+                "Uber": {
+                    "expense_type": "Ground Transportation",
+                    "business_purpose": "Client dinner ride",
+                    "comment": "Uber Ride",
+                    "allocation_code": "COST-01",
+                    "receipt_path": dummy_recon_receipt
+                },
+                "Office Depot": {
+                    "expense_type": "Office Supplies",
+                    "business_purpose": "Team materials",
+                    "comment": "Pens and notebooks",
+                    "allocation_code": "COST-02"
+                }
             }
-        }
-        recon_res = client.reconcile_report(
-            report_name="Reconciliation Report A",
-            reconciliation_rules=recon_rules,
-            headless=True
-        )
-        assert recon_res["success"] is True, "Expected reconciliation to succeed"
-        print("         [PASS] Report transactions reconciled and report submitted successfully.")
+            recon_res = client.reconcile_report(
+                report_name="Reconciliation Report A",
+                reconciliation_rules=recon_rules,
+                headless=True,
+                submit=True
+            )
+            assert recon_res["success"] is True, "Expected reconciliation to succeed"
+            assert recon_res.get("submitted") is True, "Expected report to be submitted"
+            print("         [PASS] Report transactions reconciled, receipt attached, and report submitted successfully.")
+        finally:
+            if os.path.exists(dummy_recon_receipt):
+                os.remove(dummy_recon_receipt)
 
         # ----------------------------------------------------
         # 17. NEW FEATURE: Attach Receipt directly to Report transaction

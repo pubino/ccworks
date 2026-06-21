@@ -1408,14 +1408,14 @@ class ConcurBrowserClient:
             finally:
                 browser.close()
 
-    def reconcile_report(self, report_name: str, reconciliation_rules: Dict[str, Dict[str, str]], headless: bool = True) -> Dict[str, Any]:
+    def reconcile_report(self, report_name: str, reconciliation_rules: Dict[str, Dict[str, str]], headless: bool = True, submit: bool = False) -> Dict[str, Any]:
         """
         Automates month-end reconciliation: opens the report details view,
         iterates over all transaction rows, matches them with reconciliation rules,
         inputs Expense Type, Business Purpose, Comment, and Allocation Codes,
-        saves each row, and submits the entire report when all are reconciled.
+        saves each row, and optionally submits the entire report when all are reconciled.
         """
-        logger.info(f"Starting month-end reconciliation for report '{report_name}' via browser (headless={headless})...")
+        logger.info(f"Starting month-end reconciliation for report '{report_name}' via browser (headless={headless}, submit={submit})...")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=headless)
             context = browser.new_context(storage_state=self.session_file, viewport={"width": 1280, "height": 800})
@@ -1480,6 +1480,21 @@ class ConcurBrowserClient:
                     if inp_alloc.count() > 0:
                         inp_alloc.fill(matched_rule.get("allocation_code", ""))
                     
+                    # Optional receipt attachment
+                    receipt_path = matched_rule.get("receipt_path") or matched_rule.get("receipt")
+                    if receipt_path:
+                        import os
+                        if os.path.exists(receipt_path):
+                            inp_receipt = row.locator("input.recon-receipt-file")
+                            if inp_receipt.count() > 0:
+                                inp_receipt.set_input_files(receipt_path)
+                                page.wait_for_timeout(2000)
+                                logger.info(f"Attached receipt '{receipt_path}' to transaction row '{raw_text}'.")
+                            else:
+                                logger.warning(f"Could not find receipt upload input element for '{raw_text}'.")
+                        else:
+                            logger.warning(f"Receipt file '{receipt_path}' for '{raw_text}' not found on disk.")
+
                     # Save this transaction
                     save_btn = row.locator("button.recon-save-btn").first
                     if save_btn.count() > 0:
@@ -1488,6 +1503,10 @@ class ConcurBrowserClient:
                         logger.info("Saved transaction reconciliation fields.")
 
                 self._take_screenshot(page, "reconcile_all_saved")
+
+                if not submit:
+                    logger.info("Report reconciliation completed. Skipping submission as requested (submit=False).")
+                    return {"success": True, "submitted": False}
 
                 # Click Submit Report
                 submit_btn = page.locator("#submit-entire-report-btn").first
@@ -1498,7 +1517,7 @@ class ConcurBrowserClient:
                     page.wait_for_timeout(3000)
                     self._take_screenshot(page, "reconcile_submitted")
                     logger.info("Report successfully submitted!")
-                    return {"success": True}
+                    return {"success": True, "submitted": True}
                 else:
                     raise RuntimeError("Submit Report button is missing or not enabled. Check if all transactions are reconciled.")
 

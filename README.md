@@ -67,7 +67,7 @@ Build the Python environment, install requirements, and download Playwright chro
 | **Card Transaction Details** | `./run.sh browser-card-details "Merchant/ID" [filter]` | Fetch details for a card transaction by name or ID. |
 | **Add Expense Delegate** | `./run.sh browser-add-delegate "Name" [perms...]` | Add delegate and assign permissions (prepare, submit, approve). |
 | **Remove Expense Delegate** | `./run.sh browser-remove-delegate "Name"` | Remove expense delegate from settings page. |
-| **Reconcile Report** | `./run.sh browser-reconcile "Name" [rules.json]` | Reconcile report transactions with rules and submit. |
+| **Reconcile Report** | `./run.sh browser-reconcile "Name" [rules.json] [--submit]` | Reconcile report transactions with rules (review-only by default). |
 | **Attach Receipt to Transaction** | `./run.sh browser-attach-receipt "Name" "Merchant" "receipt.pdf"` | Attach local receipt file directly to a transaction row in a report. |
 
 ---
@@ -164,15 +164,24 @@ Automates adding and removing delegates, plus managing permissions in the profil
 
 ### 4. Month-End Expense Reconciliation
 
-Reconciliation is a critical month-end task. The client navigates inside a report, reads the merchant list, and maps matching rules to fill in Expense Types, Business Purposes, Comments, and Allocation Codes for every transaction row before submitting the report.
+Reconciliation is a critical month-end task. The client navigates inside a report, reads the merchant list, and maps matching rules to fill in Expense Types, Business Purposes, Comments, and Allocation Codes for every transaction row. By default, it runs in **review-only mode** (leaving the report as a draft for your manual review). To automatically submit the report, pass the `--submit` flag.
 
-* **Reconcile and Submit Report:**
+* **Reconcile Report (Review-Only / Default):**
   ```bash
-  # Reconcile using default built-in matching rules
+  # Reconcile using default built-in matching rules (does not submit)
   ./run.sh browser-reconcile "Reconciliation Report A"
   
-  # Or provide a custom JSON file defining your accounting code mapping rules
+  # Reconcile using custom rules (does not submit)
   ./run.sh browser-reconcile "Reconciliation Report A" my_recon_rules.json
+  ```
+
+* **Reconcile and Automatically Submit Report:**
+  ```bash
+  # Reconcile and submit immediately
+  ./run.sh browser-reconcile "Reconciliation Report A" --submit
+  
+  # Reconcile using custom rules and submit
+  ./run.sh browser-reconcile "Reconciliation Report A" my_recon_rules.json --submit
   ```
   
   *Example `my_recon_rules.json` file:*
@@ -215,7 +224,7 @@ The extension is written in TypeScript and is saved at `.pi/extensions/concur.ts
 1. **`concur_list_reports(filter_view, is_old)`**: Queries and lists active or historical expense reports.
 2. **`concur_report_details(report_name, filter_view)`**: Fetches line-item details of a report.
 3. **`concur_list_card_transactions(filter_view)`**: Lists card transactions from Available Expenses.
-4. **`concur_reconcile_report(report_name, rules)`**: Automatically reconciles transactions using JSON rules and submits the report.
+4. **`concur_reconcile_report(report_name, rules, submit)`**: Automatically reconciles transactions using JSON rules, and optionally submits the report (default: `submit` is false, leaving it in draft mode for review).
 5. **`concur_attach_receipt(report_name, merchant, receipt_path)`**: Uploads and attaches a local receipt file to an expense.
 
 ### How to Enable

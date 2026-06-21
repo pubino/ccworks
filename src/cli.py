@@ -42,6 +42,7 @@ def run_tests():
     parser.add_argument("--reconcile-rules", type=str, help="Path to a JSON file containing reconciliation rules")
     parser.add_argument("--merchant", type=str, help="Merchant name or transaction ID to match receipt against")
     parser.add_argument("--receipt-path", type=str, help="Local file path of the receipt (PDF or image)")
+    parser.add_argument("--submit", action="store_true", help="Submit the report after reconciling (default: False, review-only)")
 
     args = parser.parse_args()
 
@@ -483,8 +484,16 @@ def run_tests():
         print("=" * 60)
         try:
             browser_client = ConcurBrowserClient()
-            browser_client.reconcile_report(report_name=report_name, reconciliation_rules=reconciliation_rules, headless=True)
-            print(f"\n[SUCCESS] Report '{report_name}' reconciled and submitted successfully!")
+            res = browser_client.reconcile_report(
+                report_name=report_name,
+                reconciliation_rules=reconciliation_rules,
+                headless=True,
+                submit=args.submit
+            )
+            if args.submit:
+                print(f"\n[SUCCESS] Report '{report_name}' reconciled and submitted successfully!")
+            else:
+                print(f"\n[SUCCESS] Report '{report_name}' reconciled successfully! (Draft mode, not submitted)")
             print("=" * 60)
         except Exception as e:
             print(f"\n[ERROR] Reconciliation failed: {str(e)}")

@@ -113,12 +113,16 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "concur_reconcile_report",
     label: "Reconcile Concur Report",
-    description: "Automates month-end reconciliation: fills in Expense Type, Purpose, Comment, and Allocation Codes for each transaction in the report, and submits the report.",
+    description: "Automates month-end reconciliation: fills in Expense Type, Purpose, Comment, and Allocation Codes for each transaction in the report, and optionally submits the report.",
     parameters: Type.Object({
       report_name: Type.String({ description: "Name of the draft expense report to reconcile" }),
       rules: Type.String({
         description: "JSON string representing mapping rules. Keys are merchant names (e.g., 'Uber'), values map to expense_type, business_purpose, comment, allocation_code."
-      })
+      }),
+      submit: Type.Optional(Type.Boolean({
+        description: "Whether to submit the report after reconciling (default: false, leaving report in draft mode for review)",
+        default: false
+      }))
     }),
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       // Validate JSON rules
@@ -134,7 +138,11 @@ export default function (pi: ExtensionAPI) {
       fs.writeFileSync(tempFile, JSON.stringify(rulesObj, null, 2));
 
       try {
-        const output = await runCommand(["browser-reconcile", params.report_name, tempFile]);
+        const cmdArgs = ["browser-reconcile", params.report_name, tempFile];
+        if (params.submit) {
+          cmdArgs.push("--submit");
+        }
+        const output = await runCommand(cmdArgs);
         return {
           content: [{ type: "text", text: output }],
           details: {}
