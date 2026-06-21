@@ -20,6 +20,9 @@ usage() {
     echo "  browser-create        Run Playwright automation to create a draft report headlessly"
     echo "  browser-create-headed Run Playwright automation to create a draft report visibly (headed)"
     echo "  browser-delete \"Name\"  Run Playwright to delete a specific report by name"
+    echo "  browser-delete-all-reports Run Playwright to delete all draft expense reports"
+    echo "  browser-delete-all-receipts Run Playwright to delete all available receipts"
+    echo "  browser-nuke          Run Playwright to delete all reports AND all receipts"
     exit 1
 }
 
@@ -116,6 +119,18 @@ case "$CMD" in
         echo "=== Deleting report via browser ==="
         ensure_venv
         python3 src/cli.py --browser-delete "$2"
+        ;;
+    browser-delete-all-reports)
+        ensure_venv
+        python3 src/cli.py --browser-delete-all-reports
+        ;;
+    browser-delete-all-receipts)
+        ensure_venv
+        python3 src/cli.py --browser-delete-all-receipts
+        ;;
+    browser-nuke)
+        ensure_venv
+        python3 src/cli.py --browser-delete-all
         ;;
     *)
         usage

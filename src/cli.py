@@ -24,6 +24,9 @@ def run_tests():
     group.add_argument("--browser-create", action="store_true", help="Run the browser automation to create a draft report headlessly")
     group.add_argument("--browser-create-headed", action="store_true", help="Run the browser automation to create a draft report in a headed browser (visible)")
     group.add_argument("--browser-delete", type=str, help="Delete an expense report by name using browser automation")
+    group.add_argument("--browser-delete-all-reports", action="store_true", help="Delete all draft expense reports via browser")
+    group.add_argument("--browser-delete-all-receipts", action="store_true", help="Delete all available receipts via browser")
+    group.add_argument("--browser-delete-all", action="store_true", help="Delete all draft expense reports AND all available receipts via browser")
 
     args = parser.parse_args()
 
@@ -219,6 +222,85 @@ def run_tests():
             print("=" * 60)
         except Exception as e:
             print(f"\n[ERROR] Failed to delete report: {str(e)}")
+            print("=" * 60)
+            sys.exit(1)
+
+    # ----------------------------------------------------
+    # Flow F: Delete All Reports
+    # ----------------------------------------------------
+    elif args.browser_delete_all_reports:
+        print("=" * 60)
+        print("   SAP Concur Browser-Based Delete All Reports")
+        print("=" * 60)
+        try:
+            browser_client = ConcurBrowserClient()
+            print("[*] Querying reports...")
+            reports = browser_client.list_reports(headless=True)
+            print(f"[*] Discovered {len(reports)} report(s).")
+            for r in reports:
+                name = r.get("name")
+                print(f"[*] Deleting report: '{name}'...")
+                browser_client.delete_report(name=name, headless=True)
+            print("\n[SUCCESS] All reports deleted.")
+            print("=" * 60)
+        except Exception as e:
+            print(f"\n[ERROR] Failed to delete all reports: {str(e)}")
+            print("=" * 60)
+            sys.exit(1)
+
+    # ----------------------------------------------------
+    # Flow G: Delete All Receipts
+    # ----------------------------------------------------
+    elif args.browser_delete_all_receipts:
+        print("=" * 60)
+        print("   SAP Concur Browser-Based Delete All Receipts")
+        print("=" * 60)
+        try:
+            browser_client = ConcurBrowserClient()
+            print("[*] Querying available receipts...")
+            receipts = browser_client.list_available_receipts(headless=True)
+            print(f"[*] Discovered {len(receipts)} receipt(s).")
+            for r_name in receipts:
+                print(f"[*] Deleting receipt: '{r_name}'...")
+                browser_client.delete_available_receipt(receipt_name=r_name, headless=True)
+            print("\n[SUCCESS] All available receipts deleted.")
+            print("=" * 60)
+        except Exception as e:
+            print(f"\n[ERROR] Failed to delete all receipts: {str(e)}")
+            print("=" * 60)
+            sys.exit(1)
+
+    # ----------------------------------------------------
+    # Flow H: Delete All Reports AND Receipts (Nuke)
+    # ----------------------------------------------------
+    elif args.browser_delete_all:
+        print("=" * 60)
+        print("   SAP Concur Browser-Based Nuke (Delete All Reports & Receipts)")
+        print("=" * 60)
+        try:
+            browser_client = ConcurBrowserClient()
+            
+            # Reports
+            print("[*] Querying reports...")
+            reports = browser_client.list_reports(headless=True)
+            print(f"[*] Discovered {len(reports)} report(s).")
+            for r in reports:
+                name = r.get("name")
+                print(f"[*] Deleting report: '{name}'...")
+                browser_client.delete_report(name=name, headless=True)
+                
+            # Receipts
+            print("\n[*] Querying available receipts...")
+            receipts = browser_client.list_available_receipts(headless=True)
+            print(f"[*] Discovered {len(receipts)} receipt(s).")
+            for r_name in receipts:
+                print(f"[*] Deleting receipt: '{r_name}'...")
+                browser_client.delete_available_receipt(receipt_name=r_name, headless=True)
+                
+            print("\n[SUCCESS] All reports and receipts deleted.")
+            print("=" * 60)
+        except Exception as e:
+            print(f"\n[ERROR] Failed to delete all items: {str(e)}")
             print("=" * 60)
             sys.exit(1)
 
