@@ -204,6 +204,26 @@ Matching receipt PDFs or images to individual card transactions can be automated
 
 ---
 
+## 🤖 Integration with Pi Coding Agent (pi.dev)
+
+This project includes a project-local extension for the **Pi** coding agent (an open-source terminal-based AI coding assistant at [pi.dev](https://pi.dev)).
+
+The extension is written in TypeScript and is saved at `.pi/extensions/concur.ts`. It registers custom tools that allow the Pi agent to interact directly with your SAP Concur session.
+
+### Registered Tools
+
+1. **`concur_list_reports(filter_view, is_old)`**: Queries and lists active or historical expense reports.
+2. **`concur_report_details(report_name, filter_view)`**: Fetches line-item details of a report.
+3. **`concur_list_card_transactions(filter_view)`**: Lists card transactions from Available Expenses.
+4. **`concur_reconcile_report(report_name, rules)`**: Automatically reconciles transactions using JSON rules and submits the report.
+5. **`concur_attach_receipt(report_name, merchant, receipt_path)`**: Uploads and attaches a local receipt file to an expense.
+
+### How to Enable
+
+If you use Pi within this repository, it will automatically discover the extension located in the `.pi/extensions/` folder. You can also manually load it or reload your active session by running `/reload` inside the Pi terminal client.
+
+---
+
 ## 🔮 Recommended Future Features & Integrations
 
 1. **Receipt-to-Report Attachment:**
