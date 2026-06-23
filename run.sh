@@ -97,21 +97,21 @@ case "$CMD" in
             exit 1
         fi
         ensure_venv
-        python3 src/cli.py --api
+        python3 src/cli.py api-test
         ;;
     browser-login)
         echo "=== Launching browser login automation ==="
         ensure_venv
-        python3 src/cli.py --browser-login
+        python3 src/cli.py login
         ;;
     browser-check-session)
         ensure_venv
-        python3 src/cli.py --browser-check-session
+        python3 src/cli.py check-session
         ;;
     browser-query)
         echo "=== Querying reports and receipts via browser ==="
         ensure_venv
-        python3 src/cli.py --browser-query
+        python3 src/cli.py query
         ;;
     browser-create)
         echo "=== Running headless browser report creation ==="
@@ -126,7 +126,7 @@ case "$CMD" in
         if [ $# -ge 4 ]; then
             ARGS+=("--comment" "$4")
         fi
-        python3 src/cli.py --browser-create "${ARGS[@]}"
+        python3 src/cli.py create-report "${ARGS[@]}"
         ;;
     browser-create-headed)
         echo "=== Running headed browser report creation ==="
@@ -141,7 +141,7 @@ case "$CMD" in
         if [ $# -ge 4 ]; then
             ARGS+=("--comment" "$4")
         fi
-        python3 src/cli.py --browser-create-headed "${ARGS[@]}"
+        python3 src/cli.py create-report --headed "${ARGS[@]}"
         ;;
     browser-delete)
         if [ $# -lt 2 ]; then
@@ -151,24 +151,24 @@ case "$CMD" in
         fi
         echo "=== Deleting report via browser ==="
         ensure_venv
-        python3 src/cli.py --browser-delete "$2"
+        python3 src/cli.py delete-report "$2"
         ;;
     browser-delete-all-reports)
         ensure_venv
-        python3 src/cli.py --browser-delete-all-reports
+        python3 src/cli.py delete-all-reports
         ;;
     browser-delete-all-receipts)
         ensure_venv
-        python3 src/cli.py --browser-delete-all-receipts
+        python3 src/cli.py delete-all-receipts
         ;;
     browser-nuke)
         ensure_venv
-        python3 src/cli.py --browser-delete-all
+        python3 src/cli.py nuke
         ;;
     browser-query-old)
         ensure_venv
         FILTER="${2:-Last 90 Days}"
-        python3 src/cli.py --browser-query-old --filter-view "$FILTER"
+        python3 src/cli.py list-old-reports --filter-view "$FILTER"
         ;;
     browser-report-details)
         if [ $# -lt 2 ]; then
@@ -178,12 +178,12 @@ case "$CMD" in
         fi
         ensure_venv
         FILTER="${3:-Last 90 Days}"
-        python3 src/cli.py --browser-report-details "$2" --filter-view "$FILTER"
+        python3 src/cli.py report-details "$2" --filter-view "$FILTER"
         ;;
     browser-list-cards)
         ensure_venv
         FILTER="${2:-All Corporate and Personal Cards}"
-        python3 src/cli.py --browser-list-cards --filter-view "$FILTER"
+        python3 src/cli.py list-cards --filter-view "$FILTER"
         ;;
     browser-card-details)
         if [ $# -lt 2 ]; then
@@ -193,7 +193,7 @@ case "$CMD" in
         fi
         ensure_venv
         FILTER="${3:-All Corporate and Personal Cards}"
-        python3 src/cli.py --browser-card-details "$2" --filter-view "$FILTER"
+        python3 src/cli.py card-details "$2" --filter-view "$FILTER"
         ;;
     browser-add-delegate)
         if [ $# -lt 2 ]; then
@@ -209,7 +209,7 @@ case "$CMD" in
         if [ ${#PERMS[@]} -eq 0 ]; then
             PERMS=("prepare")
         fi
-        python3 src/cli.py --browser-add-delegate "$NAME" --delegate-perms "${PERMS[@]}"
+        python3 src/cli.py add-delegate "$NAME" --delegate-perms "${PERMS[@]}"
         ;;
     browser-remove-delegate)
         if [ $# -lt 2 ]; then
@@ -218,7 +218,7 @@ case "$CMD" in
             exit 1
         fi
         ensure_venv
-        python3 src/cli.py --browser-remove-delegate "$2"
+        python3 src/cli.py remove-delegate "$2"
         ;;
     browser-reconcile)
         if [ $# -lt 2 ]; then
@@ -240,13 +240,13 @@ case "$CMD" in
             shift
         done
         if [ -n "$RULES_FILE" ] && [ -n "$SUBMIT_FLAG" ]; then
-            python3 src/cli.py --browser-reconcile "$REPORT_NAME" --reconcile-rules "$RULES_FILE" --submit
+            python3 src/cli.py reconcile "$REPORT_NAME" --reconcile-rules "$RULES_FILE" --submit
         elif [ -n "$RULES_FILE" ]; then
-            python3 src/cli.py --browser-reconcile "$REPORT_NAME" --reconcile-rules "$RULES_FILE"
+            python3 src/cli.py reconcile "$REPORT_NAME" --reconcile-rules "$RULES_FILE"
         elif [ -n "$SUBMIT_FLAG" ]; then
-            python3 src/cli.py --browser-reconcile "$REPORT_NAME" --submit
+            python3 src/cli.py reconcile "$REPORT_NAME" --submit
         else
-            python3 src/cli.py --browser-reconcile "$REPORT_NAME"
+            python3 src/cli.py reconcile "$REPORT_NAME"
         fi
         ;;
     browser-attach-receipt)
@@ -256,7 +256,7 @@ case "$CMD" in
             exit 1
         fi
         ensure_venv
-        python3 src/cli.py --browser-attach-receipt "$2" --merchant "$3" --receipt-path "$4"
+        python3 src/cli.py attach-receipt "$2" --merchant "$3" --receipt-path "$4"
         ;;
     *)
         usage

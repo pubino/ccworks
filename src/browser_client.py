@@ -174,7 +174,7 @@ class ConcurBrowserClient:
         if not os.path.exists(self.session_file):
             raise FileNotFoundError(
                 f"Session file '{self.session_file}' not found. "
-                "Please run login configuration first using: python3 src/cli.py --browser-login"
+                "Please run login configuration first using: python3 src/cli.py login"
             )
 
         logger.info(f"Launching browser (headless={headless}) using session from {self.session_file}...")
@@ -196,7 +196,7 @@ class ConcurBrowserClient:
                 current_url = page.url
                 if "login" in current_url.lower() or "signin" in current_url.lower():
                     self._take_screenshot(page, "session_expired_error")
-                    raise RuntimeError("Session appears to have expired. Please re-run '--browser-login'.")
+                    raise RuntimeError("Session appears to have expired. Please re-run 'login' or './run.sh browser-login'.")
 
                 # Wait for SPA widgets to load
                 self._wait_for_dashboard(page)

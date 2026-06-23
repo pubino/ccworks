@@ -16,44 +16,86 @@ def run_tests():
     # Load .env file
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description="SAP Concur API & Browser Access Tester")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--api", action="store_true", help="Run the API client test suite")
-    group.add_argument("--browser-login", action="store_true", help="Launch a headed browser for manual authentication and save session state")
-    group.add_argument("--browser-query", action="store_true", help="Query and list current reports and available receipts via browser automation")
-    group.add_argument("--browser-create", action="store_true", help="Run the browser automation to create a draft report headlessly")
-    group.add_argument("--browser-create-headed", action="store_true", help="Run the browser automation to create a draft report in a headed browser (visible)")
-    group.add_argument("--browser-delete", type=str, help="Delete an expense report by name using browser automation")
-    group.add_argument("--browser-delete-all-reports", action="store_true", help="Delete all draft expense reports via browser")
-    group.add_argument("--browser-delete-all-receipts", action="store_true", help="Delete all available receipts via browser")
-    group.add_argument("--browser-delete-all", action="store_true", help="Delete all draft expense reports AND all available receipts via browser")
-    group.add_argument("--browser-query-old", action="store_true", help="Query and list historical/old expense reports")
-    group.add_argument("--browser-report-details", type=str, help="Get detailed view of an expense report by name")
-    group.add_argument("--browser-list-cards", action="store_true", help="Query and list credit card transactions")
-    group.add_argument("--browser-card-details", type=str, help="Get detailed view of a card transaction by merchant or ID")
-    group.add_argument("--browser-add-delegate", type=str, help="Add a new expense delegate by name or email")
-    group.add_argument("--browser-remove-delegate", type=str, help="Remove an expense delegate by name or email")
-    group.add_argument("--browser-reconcile", type=str, help="Reconcile transactions of an expense report by name (uses mock rules or JSON config)")
-    group.add_argument("--browser-attach-receipt", type=str, help="Attach a receipt file to a transaction in a report. Specify report name as value.")
-    group.add_argument("--browser-check-session", action="store_true", help="Check whether the currently saved browser session state is valid and active")
+    parser = argparse.ArgumentParser(description="SAP Concur API & Browser Access Tool")
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Subcommands")
 
-    # Helper arguments
-    parser.add_argument("--filter-view", type=str, default="Last 90 Days", help="Filter view for reports or card transactions (default: 'Last 90 Days' or 'All Corporate and Personal Cards')")
-    parser.add_argument("--delegate-perms", nargs="+", default=["prepare"], help="Permissions for delegate adding (prepare, submit, approve) (default: ['prepare'])")
-    parser.add_argument("--reconcile-rules", type=str, help="Path to a JSON file containing reconciliation rules")
-    parser.add_argument("--merchant", type=str, help="Merchant name or transaction ID to match receipt against")
-    parser.add_argument("--receipt-path", type=str, help="Local file path of the receipt (PDF or image)")
-    parser.add_argument("--submit", action="store_true", help="Submit the report after reconciling (default: False, review-only)")
-    parser.add_argument("--name", type=str, help="Name of report to create")
-    parser.add_argument("--purpose", type=str, help="Business purpose of report to create")
-    parser.add_argument("--comment", type=str, help="Additional comment for report to create")
+    # Command: api-test
+    subparsers.add_parser("api-test", help="Run the API client test suite")
+
+    # Command: login
+    subparsers.add_parser("login", help="Launch a headed browser for manual authentication and save session state")
+
+    # Command: check-session
+    subparsers.add_parser("check-session", help="Check whether the currently saved browser session state is valid and active")
+
+    # Command: query
+    subparsers.add_parser("query", help="Query and list current reports and available receipts via browser automation")
+
+    # Command: create-report
+    p_create = subparsers.add_parser("create-report", help="Create a draft expense report using browser automation")
+    p_create.add_argument("--name", type=str, help="Name of report to create")
+    p_create.add_argument("--purpose", type=str, help="Business purpose of report to create")
+    p_create.add_argument("--comment", type=str, help="Additional comment for report to create")
+    p_create.add_argument("--headed", action="store_true", help="Run browser visibly (headed) rather than headlessly")
+
+    # Command: delete-report
+    p_del = subparsers.add_parser("delete-report", help="Delete an expense report by name using browser automation")
+    p_del.add_argument("report_name", type=str, help="Name of report to delete")
+
+    # Command: delete-all-reports
+    subparsers.add_parser("delete-all-reports", help="Delete all draft expense reports via browser")
+
+    # Command: delete-all-receipts
+    subparsers.add_parser("delete-all-receipts", help="Delete all available receipts via browser")
+
+    # Command: nuke
+    subparsers.add_parser("nuke", help="Delete all draft expense reports AND all available receipts via browser")
+
+    # Command: list-old-reports
+    p_list_old = subparsers.add_parser("list-old-reports", help="Query and list historical/old expense reports")
+    p_list_old.add_argument("--filter-view", type=str, default="Last 90 Days", help="Dropdown filter (default: 'Last 90 Days')")
+
+    # Command: report-details
+    p_rep_det = subparsers.add_parser("report-details", help="Get detailed view of an expense report by name")
+    p_rep_det.add_argument("report_name", type=str, help="Name of the expense report")
+    p_rep_det.add_argument("--filter-view", type=str, default="Last 90 Days", help="Dropdown filter to look inside (default: 'Last 90 Days')")
+
+    # Command: list-cards
+    p_list_cards = subparsers.add_parser("list-cards", help="Query and list credit card transactions")
+    p_list_cards.add_argument("--filter-view", type=str, default="All Corporate and Personal Cards", help="Filter view for cards (default: 'All Corporate and Personal Cards')")
+
+    # Command: card-details
+    p_card_det = subparsers.add_parser("card-details", help="Get detailed view of a card transaction by merchant or ID")
+    p_card_det.add_argument("merchant_or_id", type=str, help="Merchant name or transaction ID")
+    p_card_det.add_argument("--filter-view", type=str, default="All Corporate and Personal Cards", help="Filter view for cards (default: 'All Corporate and Personal Cards')")
+
+    # Command: add-delegate
+    p_add_del = subparsers.add_parser("add-delegate", help="Add a new expense delegate by name or email")
+    p_add_del.add_argument("name_or_email", type=str, help="Name or email of delegate")
+    p_add_del.add_argument("--delegate-perms", nargs="+", default=["prepare"], help="Permissions: prepare, submit, approve")
+
+    # Command: remove-delegate
+    p_rem_del = subparsers.add_parser("remove-delegate", help="Remove an expense delegate by name or email")
+    p_rem_del.add_argument("name_or_email", type=str, help="Name or email of delegate")
+
+    # Command: reconcile
+    p_recon = subparsers.add_parser("reconcile", help="Reconcile transactions of an expense report by name")
+    p_recon.add_argument("report_name", type=str, help="Name of draft report to reconcile")
+    p_recon.add_argument("--reconcile-rules", type=str, help="Path to a JSON file containing reconciliation rules")
+    p_recon.add_argument("--submit", action="store_true", help="Submit the report after reconciling (default: False, review-only)")
+
+    # Command: attach-receipt
+    p_attach = subparsers.add_parser("attach-receipt", help="Attach a receipt file to a transaction in a report")
+    p_attach.add_argument("report_name", type=str, help="Name of report containing the transaction")
+    p_attach.add_argument("--merchant", type=str, required=True, help="Merchant name or transaction ID to match receipt against")
+    p_attach.add_argument("--receipt-path", type=str, required=True, help="Local file path of the receipt")
 
     args = parser.parse_args()
 
     # ----------------------------------------------------
     # Flow A: Live API Client Tester
     # ----------------------------------------------------
-    if args.api:
+    if args.command == "api-test":
         client_id = os.getenv("CONCUR_CLIENT_ID")
         client_secret = os.getenv("CONCUR_CLIENT_SECRET")
         token_url = os.getenv("CONCUR_TOKEN_URL", "https://us.api.concursolutions.com/oauth2/v0/token")
@@ -104,25 +146,25 @@ def run_tests():
 
             print("\n[Phase 2] Attempting to list existing reports...")
             reports = client.list_reports(user_login_id=user_login_id, limit=5)
-            print(f"[SUCCESS] Successfully connected to report list API!")
+            print("[SUCCESS] Successfully connected to report list API!")
             print(f"          Retrieved {len(reports)} recent report(s):")
             
             for idx, report in enumerate(reports, 1):
-                report_name = report.get("Name", "Unnamed Report")
+                report_name_val = report.get("Name", "Unnamed Report")
                 report_id = report.get("ReportID") or report.get("ID") or "N/A"
                 report_status = report.get("ReportStatus") or report.get("ApprovalStatus") or "N/A"
                 total = report.get("Total", 0.0)
                 currency = report.get("CurrencyCode", "")
-                print(f"            {idx}. [{report_id}] {report_name} - Status: {report_status} ({total} {currency})")
+                print(f"            {idx}. [{report_id}] {report_name_val} - Status: {report_status} ({total} {currency})")
 
             print("\n[Phase 3] Attempting to create draft report...")
-            report_name = f"API Test Draft {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            report_name_val = f"API Test Draft {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             purpose = "Validating programmatic creation of draft reports"
             comment = "Created automatically via SAP Concur Python API Access Tester"
 
             created_report = client.create_draft_report(
                 user_login_id=user_login_id,
-                name=report_name,
+                name=report_name_val,
                 purpose=purpose,
                 comment=comment
             )
@@ -148,7 +190,7 @@ def run_tests():
     # ----------------------------------------------------
     # Flow B: Browser Manual Login Session Save
     # ----------------------------------------------------
-    elif args.browser_login:
+    elif args.command == "login":
         print("=" * 60)
         print("       SAP Concur Browser Authentication Session Setup")
         print("=" * 60)
@@ -157,7 +199,7 @@ def run_tests():
             browser_client = ConcurBrowserClient()
             browser_client.run_headed_login()
             print("\n[SUCCESS] Setup complete. You can now run browser-based automations.")
-            print("To run the draft creator, use: python3 src/cli.py --browser-create")
+            print("To run the draft creator, use: python3 src/cli.py create-report")
         except Exception as e:
             print(f"\n[ERROR] Failed to run manual login setup: {str(e)}")
             sys.exit(1)
@@ -165,7 +207,7 @@ def run_tests():
     # ----------------------------------------------------
     # Flow B.2: Browser Check Session Validity
     # ----------------------------------------------------
-    elif args.browser_check_session:
+    elif args.command == "check-session":
         print("=" * 60)
         print("     SAP Concur Browser Session Status Check")
         print("=" * 60)
@@ -189,7 +231,7 @@ def run_tests():
     # ----------------------------------------------------
     # Flow C: Browser Query (List Reports + List Receipts)
     # ----------------------------------------------------
-    elif args.browser_query:
+    elif args.command == "query":
         print("=" * 60)
         print("     SAP Concur Browser-Based Expense & Receipt Query")
         print("=" * 60)
@@ -220,20 +262,20 @@ def run_tests():
     # ----------------------------------------------------
     # Flow D: Browser Draft Report Creation (Headless/Headed)
     # ----------------------------------------------------
-    elif args.browser_create or args.browser_create_headed:
+    elif args.command == "create-report":
         print("=" * 60)
         print("     SAP Concur Browser-Based Draft Report Creation")
         print("=" * 60)
         
-        headless = not args.browser_create_headed
-        report_name = args.name or f"Browser Test Draft {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        headless = not args.headed
+        report_name_val = args.name or f"Browser Test Draft {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         purpose = args.purpose or "Validating browser-based creation of draft reports"
         comment = args.comment or "Created automatically via SAP Concur Python Playwright Tester"
 
         try:
             browser_client = ConcurBrowserClient()
             result = browser_client.create_draft_report(
-                name=report_name,
+                name=report_name_val,
                 purpose=purpose,
                 comment=comment,
                 headless=headless
@@ -253,16 +295,16 @@ def run_tests():
     # ----------------------------------------------------
     # Flow E: Browser Delete Report
     # ----------------------------------------------------
-    elif args.browser_delete:
-        report_name = args.browser_delete
+    elif args.command == "delete-report":
+        report_name_val = args.report_name
         print("=" * 60)
-        print(f"     SAP Concur Browser-Based Delete Report: '{report_name}'")
+        print(f"     SAP Concur Browser-Based Delete Report: '{report_name_val}'")
         print("=" * 60)
         
         try:
             browser_client = ConcurBrowserClient()
-            browser_client.delete_report(name=report_name, headless=True)
-            print(f"\n[SUCCESS] Successfully deleted report: '{report_name}'")
+            browser_client.delete_report(name=report_name_val, headless=True)
+            print(f"\n[SUCCESS] Successfully deleted report: '{report_name_val}'")
             print("=" * 60)
         except Exception as e:
             print(f"\n[ERROR] Failed to delete report: {str(e)}")
@@ -272,7 +314,7 @@ def run_tests():
     # ----------------------------------------------------
     # Flow F: Delete All Reports
     # ----------------------------------------------------
-    elif args.browser_delete_all_reports:
+    elif args.command == "delete-all-reports":
         print("=" * 60)
         print("   SAP Concur Browser-Based Delete All Reports")
         print("=" * 60)
@@ -295,7 +337,7 @@ def run_tests():
     # ----------------------------------------------------
     # Flow G: Delete All Receipts
     # ----------------------------------------------------
-    elif args.browser_delete_all_receipts:
+    elif args.command == "delete-all-receipts":
         print("=" * 60)
         print("   SAP Concur Browser-Based Delete All Receipts")
         print("=" * 60)
@@ -317,7 +359,7 @@ def run_tests():
     # ----------------------------------------------------
     # Flow H: Delete All Reports AND Receipts (Nuke)
     # ----------------------------------------------------
-    elif args.browser_delete_all:
+    elif args.command == "nuke":
         print("=" * 60)
         print("   SAP Concur Browser-Based Nuke (Delete All Reports & Receipts)")
         print("=" * 60)
@@ -351,8 +393,8 @@ def run_tests():
     # ----------------------------------------------------
     # Flow I: Query Historical (Old) Reports
     # ----------------------------------------------------
-    elif args.browser_query_old:
-        filter_val = args.filter_view or "Last 90 Days"
+    elif args.command == "list-old-reports":
+        filter_val = args.filter_view
         print("=" * 60)
         print(f"     SAP Concur Browser-Based Historical Reports (Filter: {filter_val})")
         print("=" * 60)
@@ -371,15 +413,15 @@ def run_tests():
     # ----------------------------------------------------
     # Flow J: Report Details of a Report
     # ----------------------------------------------------
-    elif args.browser_report_details:
-        report_name = args.browser_report_details
+    elif args.command == "report-details":
+        report_name_val = args.report_name
         filter_val = args.filter_view
         print("=" * 60)
-        print(f"     SAP Concur Report Details: '{report_name}'")
+        print(f"     SAP Concur Report Details: '{report_name_val}'")
         print("=" * 60)
         try:
             browser_client = ConcurBrowserClient()
-            details = browser_client.get_report_details(name=report_name, filter_view=filter_val, headless=True)
+            details = browser_client.get_report_details(name=report_name_val, filter_view=filter_val, headless=True)
             print(f"[SUCCESS] Details retrieved:")
             print(f"  Name:     {details.get('report_name')}")
             print(f"  Number:   {details.get('report_number')}")
@@ -397,8 +439,8 @@ def run_tests():
     # ----------------------------------------------------
     # Flow K: List Card Transactions
     # ----------------------------------------------------
-    elif args.browser_list_cards:
-        filter_val = args.filter_view or "All Corporate and Personal Cards"
+    elif args.command == "list-cards":
+        filter_val = args.filter_view
         print("=" * 60)
         print(f"     SAP Concur Card Transactions (Filter: {filter_val})")
         print("=" * 60)
@@ -417,8 +459,8 @@ def run_tests():
     # ----------------------------------------------------
     # Flow L: Get Card Transaction Details
     # ----------------------------------------------------
-    elif args.browser_card_details:
-        tx_id = args.browser_card_details
+    elif args.command == "card-details":
+        tx_id = args.merchant_or_id
         filter_val = args.filter_view
         print("=" * 60)
         print(f"     SAP Concur Card Transaction Details: '{tx_id}'")
@@ -441,9 +483,9 @@ def run_tests():
     # ----------------------------------------------------
     # Flow M: Add Delegate
     # ----------------------------------------------------
-    elif args.browser_add_delegate:
-        name = args.browser_add_delegate
-        perms = args.delegate_perms or ["prepare"]
+    elif args.command == "add-delegate":
+        name = args.name_or_email
+        perms = args.delegate_perms
         print("=" * 60)
         print(f"     SAP Concur Add Expense Delegate: '{name}'")
         print(f"     Permissions: {perms}")
@@ -461,8 +503,8 @@ def run_tests():
     # ----------------------------------------------------
     # Flow N: Remove Delegate
     # ----------------------------------------------------
-    elif args.browser_remove_delegate:
-        name = args.browser_remove_delegate
+    elif args.command == "remove-delegate":
+        name = args.name_or_email
         print("=" * 60)
         print(f"     SAP Concur Remove Expense Delegate: '{name}'")
         print("=" * 60)
@@ -479,8 +521,8 @@ def run_tests():
     # ----------------------------------------------------
     # Flow O: Reconcile Report Transactions
     # ----------------------------------------------------
-    elif args.browser_reconcile:
-        report_name = args.browser_reconcile
+    elif args.command == "reconcile":
+        report_name_val = args.report_name
         rules_path = args.reconcile_rules
         import json
         
@@ -508,20 +550,20 @@ def run_tests():
                 sys.exit(1)
                 
         print("=" * 60)
-        print(f"     SAP Concur Report Reconciliation: '{report_name}'")
+        print(f"     SAP Concur Report Reconciliation: '{report_name_val}'")
         print("=" * 60)
         try:
             browser_client = ConcurBrowserClient()
             res = browser_client.reconcile_report(
-                report_name=report_name,
+                report_name=report_name_val,
                 reconciliation_rules=reconciliation_rules,
                 headless=True,
                 submit=args.submit
             )
             if args.submit:
-                print(f"\n[SUCCESS] Report '{report_name}' reconciled and submitted successfully!")
+                print(f"\n[SUCCESS] Report '{report_name_val}' reconciled and submitted successfully!")
             else:
-                print(f"\n[SUCCESS] Report '{report_name}' reconciled successfully! (Draft mode, not submitted)")
+                print(f"\n[SUCCESS] Report '{report_name_val}' reconciled successfully! (Draft mode, not submitted)")
             print("=" * 60)
         except Exception as e:
             print(f"\n[ERROR] Reconciliation failed: {str(e)}")
@@ -531,22 +573,18 @@ def run_tests():
     # ----------------------------------------------------
     # Flow P: Attach Receipt to Transaction
     # ----------------------------------------------------
-    elif args.browser_attach_receipt:
-        report_name = args.browser_attach_receipt
+    elif args.command == "attach-receipt":
+        report_name_val = args.report_name
         merchant = args.merchant
         receipt_path = args.receipt_path
 
-        if not merchant or not receipt_path:
-            print("[ERROR] Please specify both --merchant and --receipt-path when attaching a receipt.")
-            sys.exit(1)
-
         print("=" * 60)
-        print(f"     SAP Concur Attach Receipt: '{receipt_path}' to '{merchant}' in '{report_name}'")
+        print(f"     SAP Concur Attach Receipt: '{receipt_path}' to '{merchant}' in '{report_name_val}'")
         print("=" * 60)
         try:
             browser_client = ConcurBrowserClient()
             browser_client.attach_receipt_to_transaction(
-                report_name=report_name,
+                report_name=report_name_val,
                 merchant_or_id=merchant,
                 receipt_file_path=receipt_path,
                 headless=True

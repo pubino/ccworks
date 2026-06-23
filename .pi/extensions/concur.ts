@@ -31,7 +31,9 @@ export default function (pi: ExtensionAPI) {
       const { stdout, stderr } = await execAsync(cmd, { cwd: path.dirname(launcher) });
       return stdout + "\n" + stderr;
     } catch (error: any) {
-      throw new Error(`Execution failed: ${error.message}\nOutput: ${error.stdout || ""}\nError: ${error.stderr || ""}`);
+      const err = new Error(`Execution failed: ${error.message}\nOutput: ${error.stdout || ""}\nError: ${error.stderr || ""}`);
+      (err as any).code = error.code;
+      throw err;
     }
   };
 
