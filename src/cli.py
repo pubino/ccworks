@@ -229,13 +229,13 @@ def run_tests():
                     print(json.dumps({"status": "error", "missing_vars": missing_vars}))
                 sys.exit(1)
 
-        if args.output == "text":
+            if args.output == "text":
                 print(f"[*] Base URL:  {base_url}")
                 print(f"[*] Token URL: {token_url}")
                 print(f"[*] Test User: {user_login_id}")
                 print(f"[*] Client ID: {client_id[:6]}... (truncated)")
                 print("-" * 60)
-    
+
             try:
                 client = ConcurClient(
                     client_id=client_id,
@@ -243,13 +243,13 @@ def run_tests():
                     token_url=token_url,
                     base_url=base_url
                 )
-    
+
                 if args.output == "text": print("\n[Phase 1] Attempting authentication...")
                 token = client.get_token()
                 if args.output == "text":
                     print("[SUCCESS] Authentication succeeded!")
                     print(f"          Access token acquired (starts with: '{token[:12]}...')")
-    
+
                 if args.output == "text": print("\n[Phase 2] Attempting to list existing reports...")
                 reports = client.list_reports(user_login_id=user_login_id, limit=5)
                 if args.output == "text":
@@ -262,19 +262,19 @@ def run_tests():
                         total = report.get("Total", 0.0)
                         currency = report.get("CurrencyCode", "")
                         print(f"            {idx}. [{report_id}] {report_name_val} - Status: {report_status} ({total} {currency})")
-    
+
                 if args.output == "text": print("\n[Phase 3] Attempting to create draft report...")
                 report_name_val = f"API Test Draft {datetime.now().strftime('%Y-%m-%d %H:%M')}"
                 purpose = "Validating programmatic creation of draft reports"
                 comment = "Created automatically via SAP Concur Python API Access Tester"
-    
+
                 created_report = client.create_draft_report(
                     user_login_id=user_login_id,
                     name=report_name_val,
                     purpose=purpose,
                     comment=comment
                 )
-    
+
                 if args.output == "text":
                     print("[SUCCESS] Programmatic report creation succeeded!")
                     print(f"          New Report Name: {created_report.get('Name')}")
@@ -288,7 +288,7 @@ def run_tests():
                         "reports_retrieved": len(reports),
                         "created_report": created_report
                     }, indent=2))
-    
+
             except ConcurError as e:
                 if args.output == "text":
                     print(f"\n[ERROR] An API error occurred during testing: {str(e)}")
