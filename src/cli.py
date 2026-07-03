@@ -41,8 +41,8 @@ def handle_session_expired(e):
                 print("\nLaunching browser for login...", file=sys.stderr)
                 client = ConcurBrowserClient()
                 client.run_headed_login()
-                print("\n[INFO] Login complete. Please re-run your previous command.\n", file=sys.stderr)
-                sys.exit(0)
+                print("\n[INFO] Login complete. Resuming your previous command...\n", file=sys.stderr)
+                os.execv(sys.executable, [sys.executable] + sys.argv)
         except (EOFError, KeyboardInterrupt):
             print("\nLogin skipped.", file=sys.stderr)
     
@@ -166,6 +166,14 @@ def run_tests():
     p_attach.add_argument("report_name", type=str, help="Name of report containing the transaction")
     p_attach.add_argument("--merchant", type=str, required=True, help="Merchant name or transaction ID to match receipt against")
     p_attach.add_argument("--receipt-path", type=str, required=True, help="Local file path of the receipt")
+
+    # Command: update-transaction
+    p_up_tx = subparsers.add_parser("update-transaction", help="Update fields of an expense/transaction inside a report")
+    p_up_tx.add_argument("report_name", type=str, help="Name of the expense report")
+    p_up_tx.add_argument("transaction_index", type=int, help="0-based index of the transaction row")
+    p_up_tx.add_argument("--type", type=str, help="Expense Type")
+    p_up_tx.add_argument("--purpose", type=str, help="Business Purpose")
+    p_up_tx.add_argument("--comment", type=str, help="Comment")
 
     args = parser.parse_args()
 
@@ -295,6 +303,10 @@ def run_tests():
                 else:
                     print(json.dumps({"status": "error", "type": "ConcurError", "message": str(e)}))
                 sys.exit(1)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[UNEXPECTED ERROR] An unexpected error occurred: {str(e)}")
@@ -318,6 +330,10 @@ def run_tests():
                 result = {"status": "success", "message": "Manual login setup complete."}
                 summary = "\n[SUCCESS] Setup complete. You can now run browser-based automations.\nTo run the draft creator, use: python3 src/cli.py create-report"
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to run manual login setup: {str(e)}")
@@ -345,6 +361,10 @@ def run_tests():
                     summary = f"\n[EXPIRED/NOT FOUND] Authentication is NOT valid.\nDetail: {result.get('reason')}\n" + "=" * 60
                     output_result(result, summary)
                     sys.exit(2)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to execute session status check: {str(e)}\n" + "=" * 60)
@@ -384,6 +404,10 @@ def run_tests():
                 summary += "\n" + "=" * 60
     
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Browser query failed: {str(e)}\n" + "=" * 60)
@@ -421,6 +445,10 @@ def run_tests():
                 summary += f"          Notes:          {result.get('notes')}\n" + "=" * 60
                 
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Browser automation failed: {str(e)}\n" + "=" * 60)
@@ -446,6 +474,10 @@ def run_tests():
                 result = {"status": "success", "report_name": report_name_val}
                 summary = f"\n[SUCCESS] Successfully deleted report: '{report_name_val}'\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to delete report: {str(e)}\n" + "=" * 60)
@@ -472,6 +504,10 @@ def run_tests():
                 result = {"status": "success", "count": len(reports)}
                 summary = f"\n[SUCCESS] All {len(reports)} reports deleted.\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to delete all reports: {str(e)}\n" + "=" * 60)
@@ -497,6 +533,10 @@ def run_tests():
                 result = {"status": "success", "count": len(receipts)}
                 summary = f"\n[SUCCESS] All {len(receipts)} available receipts deleted.\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to delete all receipts: {str(e)}\n" + "=" * 60)
@@ -525,6 +565,10 @@ def run_tests():
                 result = {"status": "success", "reports_deleted": len(reports), "receipts_deleted": len(receipts)}
                 summary = f"\n[SUCCESS] All {len(reports)} reports and {len(receipts)} receipts deleted.\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to delete all items: {str(e)}\n" + "=" * 60)
@@ -552,6 +596,10 @@ def run_tests():
                 summary += "=" * 60
                 
                 output_result(reports, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Historical reports query failed: {str(e)}\n" + "=" * 60)
@@ -582,9 +630,19 @@ def run_tests():
                 summary += f"  Expenses: ({len(details.get('expenses'))} items)\n"
                 for item in details.get('expenses'):
                     summary += f"    - {item.get('raw_text')}\n"
+                    if item.get('type') and item.get('type') != 'Unknown':
+                        summary += f"      Type:             {item.get('type')}\n"
+                    if item.get('business_purpose'):
+                        summary += f"      Business Purpose: {item.get('business_purpose')}\n"
+                    if item.get('comment'):
+                        summary += f"      Comment:          {item.get('comment')}\n"
                 summary += "=" * 60
                 
                 output_result(details, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to get report details: {str(e)}\n" + "=" * 60)
@@ -601,6 +659,10 @@ def run_tests():
                     browser_client = ConcurBrowserClient()
                     data = browser_client.get_report_allocations(args.report_name, filter_view=args.filter_view, headless=True)
                     print(json.dumps(data, indent=2))
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 print(json.dumps({"status": "error", "message": str(e)}))
     
@@ -624,6 +686,10 @@ def run_tests():
                 summary += "=" * 60
                 
                 output_result(txs, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Listing card transactions failed: {str(e)}\n" + "=" * 60)
@@ -655,6 +721,10 @@ def run_tests():
                 summary += "=" * 60
                 
                 output_result(details, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to get transaction details: {str(e)}\n" + "=" * 60)
@@ -681,6 +751,10 @@ def run_tests():
                 result = {"status": "success", "name": name, "permissions": perms}
                 summary = f"\n[SUCCESS] Delegate '{name}' added successfully!\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to add delegate: {str(e)}\n" + "=" * 60)
@@ -705,6 +779,10 @@ def run_tests():
                 result = {"status": "success", "name": name}
                 summary = f"\n[SUCCESS] Delegate '{name}' removed successfully!\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to remove delegate: {str(e)}\n" + "=" * 60)
@@ -738,6 +816,10 @@ def run_tests():
                 try:
                     with open(rules_path, "r") as f:
                         reconciliation_rules = json.load(f)
+                except ConcurSessionExpiredError as e:
+
+                    handle_session_expired(e)
+
                 except Exception as e:
                     if args.output == "text":
                         print(f"[ERROR] Failed to load reconciliation rules JSON from '{rules_path}': {str(e)}")
@@ -765,6 +847,10 @@ def run_tests():
                     summary = f"\n[SUCCESS] Report '{report_name_val}' reconciled successfully! (Draft mode, not submitted)\n" + "=" * 60
                 
                 output_result(res, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Reconciliation failed: {str(e)}\n" + "=" * 60)
@@ -797,9 +883,49 @@ def run_tests():
                 result = {"status": "success", "merchant": merchant, "receipt": receipt_path}
                 summary = f"\n[SUCCESS] Receipt '{receipt_path}' attached successfully!\n" + "=" * 60
                 output_result(result, summary)
+            except ConcurSessionExpiredError as e:
+
+                handle_session_expired(e)
+
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to attach receipt: {str(e)}\n" + "=" * 60)
+                else:
+                    print(json.dumps({"status": "error", "message": str(e)}))
+                sys.exit(1)
+
+        # ----------------------------------------------------
+        # Flow Q: Update Transaction Fields
+        # ----------------------------------------------------
+        elif args.command == "update-transaction":
+            report_name_val = args.report_name
+            tx_idx = args.transaction_index
+            exp_type = args.type
+            bus_purpose = args.purpose
+            cmt = args.comment
+
+            if args.output == "text":
+                print("=" * 60)
+                print(f"     SAP Concur Update Transaction: Row {tx_idx} in '{report_name_val}'")
+                print("=" * 60)
+            try:
+                with Spinner(f"Updating transaction index {tx_idx} in report '{report_name_val}'..."):
+                    browser_client = ConcurBrowserClient()
+                    res = browser_client.update_report_transaction(
+                        report_name=report_name_val,
+                        transaction_index=tx_idx,
+                        expense_type=exp_type,
+                        business_purpose=bus_purpose,
+                        comment=cmt,
+                        headless=True
+                    )
+                summary = f"\n[SUCCESS] Transaction fields updated successfully!\n" + "=" * 60
+                output_result(res, summary)
+            except ConcurSessionExpiredError as e:
+                handle_session_expired(e)
+            except Exception as e:
+                if args.output == "text":
+                    print(f"\n[ERROR] Failed to update transaction: {str(e)}\n" + "=" * 60)
                 else:
                     print(json.dumps({"status": "error", "message": str(e)}))
                 sys.exit(1)

@@ -325,4 +325,35 @@ export default function (pi: ExtensionAPI) {
       }
     }
   });
+
+  // 13. Tool: concur_update_transaction
+  pi.registerTool({
+    name: "concur_update_transaction",
+    label: "Update Report Transaction Fields",
+    description: "Updates fields (Expense Type, Business Purpose, and Comments) of an individual transaction inside an expense report, identified by its 0-based index. To remove a comment, pass an empty string.",
+    parameters: Type.Object({
+      report_name: Type.String({ description: "Name of the expense report containing the transaction" }),
+      transaction_index: Type.Integer({ description: "0-based index of the target transaction row" }),
+      type: Type.Optional(Type.String({ description: "The Expense Type to apply" })),
+      purpose: Type.Optional(Type.String({ description: "The Business Purpose to apply" })),
+      comment: Type.Optional(Type.String({ description: "The Comment to apply (pass empty string to clear/delete)" }))
+    }),
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      const args = ["update-transaction", params.report_name, String(params.transaction_index)];
+      if (params.type !== undefined) {
+        args.push("--type", params.type);
+      }
+      if (params.purpose !== undefined) {
+        args.push("--purpose", params.purpose);
+      }
+      if (params.comment !== undefined) {
+        args.push("--comment", params.comment);
+      }
+      const output = await runCommand(args);
+      return {
+        content: [{ type: "text", text: output }],
+        details: {}
+      };
+    }
+  });
 }

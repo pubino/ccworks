@@ -69,6 +69,7 @@ Build the Python environment, install requirements, and download Playwright chro
 | **Remove Expense Delegate** | `./kkw remove-delegate "Name"` | Remove expense delegate from settings page. |
 | **Reconcile Report** | `./kkw reconcile "Name" [rules.json] [--submit]` | Reconcile report transactions with rules (review-only by default). |
 | **Attach Receipt to Transaction** | `./kkw attach-receipt "Name" "Merchant" "receipt.pdf"` | Attach local receipt file directly to a transaction row in a report. |
+| **Update Report Transaction** | `./kkw update-transaction "Name" [index] [args...]` | Update fields (type, purpose, comment) of a transaction row in a report. |
 
 ---
 
@@ -211,6 +212,40 @@ Matching receipt PDFs or images to individual card transactions can be automated
   ./kkw attach-receipt "Receipt Upload Report A" "Uber" "receipts/uber_ride_receipt.pdf"
   ```
 
+### 6. Read and Write Report Transaction Fields (CRUD)
+
+You can read or write individual transaction fields (Expense Type, Business Purpose, and Comments) inside an expense report. This supports full CRUD operations on transaction comments.
+
+* **Update Transaction fields (Write/Update):**
+  ```bash
+  # Update Expense Type, Business Purpose, and Comment of transaction index 0 in "Transaction Report"
+  ./kkw update-transaction "Transaction Report" 0 --type "Ground Transportation" --purpose "Meeting client for lunch" --comment "Test comment"
+  ```
+
+* **Remove/Clear Transaction fields (Delete/Remove):**
+  ```bash
+  # Clear the comment field by passing an empty string
+  ./kkw update-transaction "Transaction Report" 0 --comment ""
+  ```
+
+* **Verify / Read details (Read):**
+  ```bash
+  ./kkw report-details "Transaction Report"
+  ```
+  *Output Example:*
+  ```text
+  [SUCCESS] Details retrieved:
+    Name:     Transaction Report
+    Number:   REP-8899
+    Purpose:  Client lunch
+    Comment:  N/A
+    Expenses: (2 items)
+      - Date: 2026-06-12 | Type: Ground Transportation | Amount: $24.50 | Merchant: Uber
+        Type:             Ground Transportation
+        Business Purpose: Meeting client for lunch
+        Comment:          Test comment
+  ```
+
 ---
 
 ## 🤖 Integration with Pi Coding Agent (pi.dev)
@@ -233,6 +268,7 @@ The extension is written in TypeScript and is saved at `.pi/extensions/concur.ts
 10. **`concur_remove_delegate(name_or_email)`**: Removes an expense delegate from settings by name or email.
 11. **`concur_nuke_drafts_and_receipts()`**: Deletes all draft reports and available receipts inside Concur (intended for testing cleanup).
 12. **`concur_check_session()`**: Checks whether the currently saved browser session state is active and valid (returns true if authenticated, false if expired or missing).
+13. **`concur_update_transaction(report_name, transaction_index, type, purpose, comment)`**: Updates fields (type, business purpose, comment) of a specific transaction inside an expense report.
 
 ### How to Enable
 

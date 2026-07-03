@@ -33,6 +33,7 @@ usage() {
     echo "  remove-delegate \"Name or Email\" Remove an expense delegate" >&2
     echo "  reconcile \"Name\" [rules.json] [--submit] Reconcile expense report transactions (default: review-only, --submit to submit)" >&2
     echo "  attach-receipt \"Name\" \"Merchant\" \"receipt.pdf\" Attach a local receipt file to a report transaction" >&2
+    echo "  update-transaction \"Report\" [index] [args...] Update fields of a transaction inside a report" >&2
     exit 1
 }
 
@@ -276,6 +277,18 @@ case "$CMD" in
         fi
         ensure_venv
         python3 src/cli.py attach-receipt "$2" --merchant "$3" --receipt-path "$4"
+        ;;
+    update-transaction)
+        if [ $# -lt 3 ]; then
+            echo "Error: Please specify report name and transaction index." >&2
+            echo "Usage: ./kkw update-transaction \"Report Name\" \"Transaction Index\" [--type \"Expense Type\"] [--purpose \"Business Purpose\"] [--comment \"Comment\"]" >&2
+            exit 1
+        fi
+        ensure_venv
+        REPORT_NAME="$2"
+        INDEX="$3"
+        shift 3
+        python3 src/cli.py update-transaction "$REPORT_NAME" "$INDEX" "$@"
         ;;
     *)
         usage

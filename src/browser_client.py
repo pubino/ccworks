@@ -619,6 +619,107 @@ class ConcurBrowserClient:
             finally:
                 browser.close()
 
+    def update_report_transaction(
+        self,
+        report_name: str,
+        transaction_index: int,
+        expense_type: Optional[str] = None,
+        business_purpose: Optional[str] = None,
+        comment: Optional[str] = None,
+        headless: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Updates the fields of a specific transaction inside an expense report.
+        To remove/clear a field, pass an empty string "".
+        """
+        logger.info(f"Updating transaction at index {transaction_index} in report '{report_name}' (headless={headless})...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless)
+            context = browser.new_context(storage_state=self.session_file, viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+
+            try:
+                page.goto(f"{self.base_url}/nui/expense", timeout=30000)
+                self._wait_for_dashboard(page)
+                self._take_screenshot(page, "update_transaction_start")
+
+                # Locate and open the report
+                card_selectors = [".report-tile", ".report-card", ".sapMCard", ".sapMLIB", ".cnqr-report-card"]
+                card = None
+                for selector in card_selectors:
+                    loc = page.locator(selector).filter(has_text=report_name)
+                    if loc.count() > 0:
+                        card = loc.first
+                        break
+                
+                if not card:
+                    raise FileNotFoundError(f"Could not find report '{report_name}'.")
+
+                card.click()
+                page.wait_for_timeout(3000)
+                self._wait_for_dashboard(page)
+                self._take_screenshot(page, "update_transaction_report_opened")
+
+                # Locate the specific transaction row
+                rows = page.locator(".transaction-recon-row, .detail-row").all()
+                if not rows:
+                    raise RuntimeError("No transaction rows found in report.")
+                
+                if transaction_index < 0 or transaction_index >= len(rows):
+                    raise IndexError(f"Transaction index {transaction_index} is out of bounds (found {len(rows)} transactions).")
+
+                row = rows[transaction_index]
+                logger.info(f"Located transaction row at index {transaction_index}.")
+
+                # Fill in the fields
+                if expense_type is not None:
+                    sel_type = row.locator("select.recon-type, select[id*='type'], input.recon-type")
+                    if sel_type.count() > 0:
+                        tag_name = sel_type.first.evaluate("el => el.tagName.toLowerCase()")
+                        if tag_name == "select":
+                            sel_type.first.select_option(label=expense_type)
+                        else:
+                            sel_type.first.fill(expense_type)
+                        logger.info(f"Updated expense type to: {expense_type}")
+
+                if business_purpose is not None:
+                    inp_purpose = row.locator("input.recon-purpose, input[id*='purpose']")
+                    if inp_purpose.count() > 0:
+                        inp_purpose.first.fill(business_purpose)
+                        logger.info(f"Updated business purpose to: {business_purpose}")
+
+                if comment is not None:
+                    inp_comment = row.locator("input.recon-comment, input[id*='comment']")
+                    if inp_comment.count() > 0:
+                        inp_comment.first.fill(comment)
+                        logger.info(f"Updated comment to: {comment}")
+
+                # Save the changes by clicking the save button
+                save_btn = row.locator("button.recon-save-btn, button:has-text('Save')").first
+                if save_btn.count() > 0:
+                    save_btn.click()
+                    page.wait_for_timeout(2000)
+                    logger.info("Changes saved successfully.")
+                else:
+                    logger.warning("Could not find a save button for the transaction row.")
+
+                self._take_screenshot(page, "update_transaction_saved")
+
+                return {
+                    "success": True,
+                    "report_name": report_name,
+                    "transaction_index": transaction_index,
+                    "expense_type": expense_type,
+                    "business_purpose": business_purpose,
+                    "comment": comment
+                }
+
+            except Exception as e:
+                self._take_screenshot(page, "update_transaction_error")
+                raise e
+            finally:
+                browser.close()
+
     def delete_report(self, name: str, headless: bool = True) -> Dict[str, Any]:
         """
         [DELETE] Locates an expense report by its name, clicks delete, and confirms.
@@ -1171,12 +1272,72 @@ class ConcurBrowserClient:
                                 vendor = vendor_match.group(1).strip()
                                 if not vendor: vendor = "Unknown"
 
+                        # Try to read fields from active inputs/selects or static labels if they exist in the row
+                        business_purpose = "Unknown"
+                        comment_field = "Unknown"
+                        
+                        try:
+                            # Check for select.recon-type or input.recon-type, or search by ID/class
+                            type_el = row.locator("select.recon-type, select[id*='type'], input.recon-type").first
+                            if type_el.count() > 0:
+                                val = type_el.input_value()
+                                if val:
+                                    exp_type = val
+                        except Exception as e:
+                            logger.debug(f"Could not read type from input/select: {e}")
+
+                        try:
+                            # Check for input.recon-purpose
+                            purpose_el = row.locator("input.recon-purpose, input[id*='purpose']").first
+                            if purpose_el.count() > 0:
+                                business_purpose = purpose_el.input_value()
+                            else:
+                                # Check for static text element
+                                purpose_text_el = row.locator(".recon-purpose, [class*='purpose']").first
+                                if purpose_text_el.count() > 0:
+                                    business_purpose = purpose_text_el.text_content().strip()
+                        except Exception as e:
+                            logger.debug(f"Could not read business purpose from input/select: {e}")
+
+                        try:
+                            # Check for input.recon-comment
+                            comment_el = row.locator("input.recon-comment, input[id*='comment']").first
+                            if comment_el.count() > 0:
+                                comment_field = comment_el.input_value()
+                            else:
+                                # Check for static text element
+                                comment_text_el = row.locator(".recon-comment, [class*='comment']").first
+                                if comment_text_el.count() > 0:
+                                    comment_field = comment_text_el.text_content().strip()
+                        except Exception as e:
+                            logger.debug(f"Could not read comment from input/select: {e}")
+
+                        if business_purpose == "Unknown" or not business_purpose:
+                            # Try to extract from text
+                            # e.g. "Business Purpose: Client meeting"
+                            purpose_match = re.search(r'(?i)business purpose:?\s*([^|]+)', text)
+                            if purpose_match:
+                                business_purpose = purpose_match.group(1).strip()
+                            else:
+                                business_purpose = ""
+
+                        if comment_field == "Unknown" or not comment_field:
+                            # Try to extract from text
+                            # e.g. "Comment: Taxi ride"
+                            comment_match = re.search(r'(?i)comment:?\s*([^|]+)', text)
+                            if comment_match:
+                                comment_field = comment_match.group(1).strip()
+                            else:
+                                comment_field = ""
+
                         expenses.append({
                             "index": idx,
                             "date": date_str,
                             "type": exp_type,
                             "vendor": vendor,
                             "amount": amount,
+                            "business_purpose": business_purpose,
+                            "comment": comment_field,
                             "raw_text": text
                         })
                     except Exception:

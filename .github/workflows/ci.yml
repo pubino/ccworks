@@ -64,3 +64,4 @@ jobs:
     - name: Run Playwright browser smoke tests
       run: |
         python tests/test_browser_smoke.py
+        python tests/test_transaction_fields_crud.py
