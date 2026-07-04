@@ -664,17 +664,34 @@ class ConcurBrowserClient:
     def update_report_transaction(
         self,
         report_name: str,
-        transaction_indices: Union[int, List[int]],
+        transaction_indices: Optional[Union[int, List[int]]] = None,
         expense_type: Optional[str] = None,
         business_purpose: Optional[str] = None,
         comment: Optional[str] = None,
-        headless: bool = True
+        headless: bool = True,
+        transaction_index: Optional[int] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         """
         Updates the fields of one or more transactions inside an expense report.
         transaction_indices can be a single integer or a list of integers (1-based).
         To remove/clear a field, pass an empty string "".
         """
+        # Handle transaction_index (0-based) vs transaction_indices (1-based)
+        if transaction_indices is None:
+            if transaction_index is not None:
+                transaction_indices = transaction_index + 1
+            elif "transaction_index" in kwargs:
+                transaction_indices = kwargs["transaction_index"] + 1
+            else:
+                raise ValueError("Must provide either transaction_indices or transaction_index.")
+
+        # If they passed transaction_index positionally as transaction_indices (e.g. 0), map it to 1-based indexing
+        if isinstance(transaction_indices, int) and transaction_indices == 0:
+            transaction_indices = 1
+        elif isinstance(transaction_indices, list) and 0 in transaction_indices:
+            transaction_indices = [idx + 1 if idx == 0 else idx for idx in transaction_indices]
+
         indices = [transaction_indices] if isinstance(transaction_indices, int) else transaction_indices
         logger.info(f"Updating transactions at indices {indices} in report '{report_name}' (headless={headless})...")
         with sync_playwright() as p:
@@ -753,6 +770,7 @@ class ConcurBrowserClient:
 
                         row = valid_rows[current_idx - 1]
                         
+                        selection_successful = False
                         for attempt in range(4):
                             logger.info(f"  [{current_idx}] Selection attempt {attempt + 1}...")
                             
@@ -858,7 +876,6 @@ class ConcurBrowserClient:
                                     if tag_name == "select":
                                         inp_type.select_option(label=expense_type)
                                         logger.info(f"  [{current_idx}] Selected expense type via <select>")
-                                        updates_found += 1
                                     else:
                                         # Handle searchable dropdown (Suggester)
                                         logger.info(f"  [{current_idx}] Attempting to update expense type via Suggester: {expense_type}")
@@ -875,29 +892,35 @@ class ConcurBrowserClient:
                                         if list_item.count() > 0 and list_item.is_visible():
                                             list_item.click()
                                             logger.info(f"  [{current_idx}] Selected matching item from dropdown list")
-                                            updates_found += 1
                                         else:
                                             page.keyboard.press("Enter")
                                             logger.info(f"  [{current_idx}] No exact list match, used Enter")
-                                            # We count this as found because we filled it
-                                            updates_found += 1
                                         
                                         page.wait_for_timeout(1000)
                                         # Verify it stuck - only if it's an input/select
-                                        tag = inp_type.evaluate("el => el.tagName.toLowerCase()")
-                                        if tag in ["input", "textarea", "select"]:
-                                            current_val = inp_type.input_value()
-                                            if expense_type.lower() not in current_val.lower():
-                                                logger.warning(f"  [{current_idx}] Warning: Expense type value '{current_val}' may not have updated correctly.")
+                                        try:
+                                            tag = inp_type.evaluate("el => el.tagName.toLowerCase()")
+                                            if tag in ["input", "textarea", "select"]:
+                                                current_val = inp_type.input_value()
+                                                if expense_type.lower() not in current_val.lower():
+                                                    logger.warning(f"  [{current_idx}] Warning: Expense type value '{current_val}' may not have updated correctly.")
+                                        except Exception as verify_e:
+                                            logger.warning(f"  [{current_idx}] Could not verify if updated value stuck: {verify_e}")
+                                    
+                                    # Increment only when successful
+                                    updates_found += 1
                                 except Exception as type_e:
                                     logger.error(f"  [{current_idx}] Failed to update expense type: {type_e}")
                             else:
                                 # Try one more broad but restricted to inputs
                                 inp_type = detail_pane.locator("input, select, textarea").filter(has_text=re.compile("Type", re.I)).first
                                 if inp_type.count() > 0:
-                                     inp_type.fill(expense_type)
-                                     logger.info(f"  [{current_idx}] Updated expense type via broad fallback")
-                                     updates_found += 1
+                                    try:
+                                         inp_type.fill(expense_type)
+                                         logger.info(f"  [{current_idx}] Updated expense type via broad fallback")
+                                         updates_found += 1
+                                    except Exception as type_e:
+                                         logger.error(f"  [{current_idx}] Failed to update expense type via broad fallback: {type_e}")
                                 else:
                                     logger.warning(f"  [{current_idx}] Could not find Expense Type field in detail pane")
 
@@ -1730,6 +1753,7 @@ class ConcurBrowserClient:
                             "index": idx,
                             "date": date_str,
                             "expense_type": exp_type,
+                            "type": exp_type,
                             "vendor": vendor,
                             "amount": amount,
                             "business_purpose": business_purpose if business_purpose.lower() not in ["", "unknown"] else "",
@@ -1824,12 +1848,16 @@ class ConcurBrowserClient:
                                 t_label = page.locator("label:has-text('Expense Type')").first
                                 t_id = t_label.get_attribute("for") if t_label.count() > 0 else None
                                 if t_id:
-                                    expenses[i]["expense_type"] = page.locator(f"#{t_id}").input_value().strip()
+                                    val = page.locator(f"#{t_id}").input_value().strip()
+                                    expenses[i]["expense_type"] = val
+                                    expenses[i]["type"] = val
                                 else:
                                     # Fallback to data-nuiexp
                                     t_field = page.locator("[data-nuiexp*='type']").first
                                     if t_field.count() > 0:
-                                        expenses[i]["expense_type"] = t_field.input_value().strip()
+                                        val = t_field.input_value().strip()
+                                        expenses[i]["expense_type"] = val
+                                        expenses[i]["type"] = val
                             except: pass
                             
                             # Comment
@@ -1850,37 +1878,60 @@ class ConcurBrowserClient:
                             except: pass
                             
                             # 6. Back to list
-                            back_selectors = [
-                                ".sapcnqr-icon--nav-back",
-                                "button:has-text('Cancel')",
-                                "button:has-text('Back')",
-                                "[data-nuiexp='exit-full-screen-button']",
-                                ".sapMBtnBack",
-                                "button[title*='Back']",
-                                "button[aria-label*='Back']"
-                                "button[aria-label*='Back']",
-                                "button[id*='back']"
-                            ]
                             clicked_back = False
-                            for sel in back_selectors:
-                                btn = page.locator(sel).first
-                                if btn.count() > 0 and btn.is_visible():
-                                    logger.info(f"  Clicking back/cancel button using selector: {sel}")
-                                    self._dismiss_modals(page)
-                                    btn.click(force=True)
-                                    clicked_back = True
-                                    
-                                    # Wait and VERIFY we are back in the list, NOT the dashboard
-                                    page.wait_for_timeout(2000)
-                                    if page.locator(".report-tile").count() > 0 and page.locator(", ".join(row_selectors)).count() == 0:
-                                        logger.warning("  Oops! Went back to dashboard. Re-opening report...")
-                                        report_card = page.locator(".report-tile").filter(has_text=report_name).first
-                                        if report_card.count() > 0:
-                                            report_card.click()
-                                            page.wait_for_timeout(3000)
-                                    break
                             
+                            # Prioritize clicking back/cancel INSIDE the side panel or detail pane
+                            detail_pane = page.locator("#sapcnqr-layout-side-panel-elements, .sapcnqr-layout-side-panel__elements, .ere__dynamic-main-content").filter(visible=True).first
+                            if detail_pane.count() > 0:
+                                pane_back_selectors = [
+                                    "button:has-text('Cancel')",
+                                    "button:has-text('Back')",
+                                    ".sapMBtn:has-text('Cancel')",
+                                    ".sapMBtn:has-text('Back')",
+                                    "[data-nuiexp*='cancel']",
+                                    "[data-nuiexp*='back']",
+                                    ".sapcnqr-icon--nav-back"
+                                ]
+                                for sel in pane_back_selectors:
+                                    btn = detail_pane.locator(sel).first
+                                    if btn.count() > 0 and btn.is_visible():
+                                        logger.info(f"  Clicking back/cancel button INSIDE detail pane: {sel}")
+                                        self._dismiss_modals(page)
+                                        btn.click(force=True)
+                                        clicked_back = True
+                                        break
+                                        
                             if not clicked_back:
+                                # Fallback to page-level selectors
+                                page_back_selectors = [
+                                    ".sapcnqr-icon--nav-back",
+                                    "[data-nuiexp='exit-full-screen-button']",
+                                    ".sapMBtnBack",
+                                    "button[title*='Back']",
+                                    "button[aria-label*='Back']",
+                                    "button[id*='back']",
+                                    "button:has-text('Cancel')",
+                                    "button:has-text('Back')"
+                                ]
+                                for sel in page_back_selectors:
+                                    btn = page.locator(sel).first
+                                    if btn.count() > 0 and btn.is_visible():
+                                        logger.info(f"  Clicking back/cancel button using page-level selector: {sel}")
+                                        self._dismiss_modals(page)
+                                        btn.click(force=True)
+                                        clicked_back = True
+                                        break
+
+                            # Wait and VERIFY we are back in the list, NOT the dashboard
+                            if clicked_back:
+                                page.wait_for_timeout(2000)
+                                if page.locator(".report-tile").count() > 0 and page.locator(", ".join(row_selectors)).count() == 0:
+                                    logger.warning("  Oops! Went back to dashboard. Re-opening report...")
+                                    report_card = page.locator(".report-tile").filter(has_text=name).first
+                                    if report_card.count() > 0:
+                                        report_card.click()
+                                        page.wait_for_timeout(3000)
+                            else:
                                 # Check if detail pane is still visible
                                 if page.locator("#sapcnqr-layout-side-panel-elements").filter(visible=True).count() > 0:
                                     logger.warning("  Detail pane still visible. Trying Escape key.")

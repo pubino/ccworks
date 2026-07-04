@@ -90,7 +90,7 @@ def run_transaction_crud_test():
 
         # Step 4: Read and Verify written fields
         print(f"\n[Step 4] Reading details again to verify written fields...")
-        details = client.get_report_details(name=report_name, headless=True)
+        details = client.get_report_details(name=report_name, deep=True, headless=True)
         first_tx = details["expenses"][0]
         print(f"         Transaction 0 after write: {first_tx}")
         assert first_tx["type"] == "Ground Transportation", f"Expected 'Ground Transportation', got '{first_tx['type']}'"
@@ -109,7 +109,7 @@ def run_transaction_crud_test():
         assert update_res["success"] is True, "Failed to update transaction fields."
         
         # Read and verify updated comment
-        details = client.get_report_details(name=report_name, headless=True)
+        details = client.get_report_details(name=report_name, deep=True, headless=True)
         first_tx = details["expenses"][0]
         print(f"         Transaction 0 after comment update: {first_tx}")
         assert first_tx["comment"] == "Updated test comment", f"Expected updated comment, got '{first_tx['comment']}'"
@@ -126,7 +126,7 @@ def run_transaction_crud_test():
         assert update_res["success"] is True, "Failed to remove transaction comment."
         
         # Read and verify comment is removed (empty)
-        details = client.get_report_details(name=report_name, headless=True)
+        details = client.get_report_details(name=report_name, deep=True, headless=True)
         first_tx = details["expenses"][0]
         print(f"         Transaction 0 after comment removal: {first_tx}")
         assert first_tx["comment"] == "", f"Expected empty comment, got '{first_tx['comment']}'"
