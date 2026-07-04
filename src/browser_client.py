@@ -937,6 +937,14 @@ class ConcurBrowserClient:
                                     if list_item.count() > 0 and list_item.is_visible():
                                         list_item.click(force=True)
                                         logger.info(f"  [{current_idx}] Selected matching item from dropdown list")
+                                        page.wait_for_timeout(1000)
+                                        
+                                        # VERIFY IT STUCK
+                                        val_after = inp_type.text_content() or ""
+                                        if expense_type.lower() not in val_after.lower():
+                                            logger.warning(f"  [{current_idx}] Warning: Selection might not have stuck. Current text: '{val_after.strip()}'")
+                                        
+                                        self._take_screenshot(page, f"transaction_{current_idx}_after_type_selection")
                                         updates_found += 1
                                     else:
                                         # Try a partial match if exact fails
@@ -944,10 +952,14 @@ class ConcurBrowserClient:
                                         if list_item.count() > 0 and list_item.is_visible():
                                             list_item.click(force=True)
                                             logger.info(f"  [{current_idx}] Selected partial matching item from dropdown list")
+                                            page.wait_for_timeout(1000)
+                                            self._take_screenshot(page, f"transaction_{current_idx}_after_type_selection_partial")
                                             updates_found += 1
                                         else:
                                             page.keyboard.press("Enter")
                                             logger.info(f"  [{current_idx}] No list match, used Enter")
+                                            page.wait_for_timeout(1000)
+                                            self._take_screenshot(page, f"transaction_{current_idx}_after_type_enter")
                                             updates_found += 1
                                     
                                     page.wait_for_timeout(1000)
