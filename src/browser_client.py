@@ -826,30 +826,50 @@ class ConcurBrowserClient:
                                         btn.wait_for_element_state("enabled", timeout=5000)
                                         logger.info(f"  [{current_idx}] 'Edit' button enabled, clicking.")
                                         btn.click(force=True)
-                                        selection_successful = True
-                                        break
+                                        # Wait for pane to appear
+                                        try:
+                                            page.wait_for_selector("[data-nuiexp*='field'], input[id*='type'], .sapMInputBaseInner", timeout=5000)
+                                            selection_successful = True
+                                            break
+                                        except:
+                                            logger.warning(f"  [{current_idx}] Clicked 'Edit' but no fields appeared.")
                                     except:
                                         logger.warning(f"  [{current_idx}] 'Edit' button visible but not enabled yet.")
+                            
+                            if not selection_successful:
+                                # Fallback 1: Double click the row
+                                logger.info(f"  [{current_idx}] Falling back to double-click on row...")
+                                row.dblclick(force=True)
+                                try:
+                                    page.wait_for_selector("[data-nuiexp*='field'], input[id*='type']", timeout=5000)
+                                    selection_successful = True
+                                except:
+                                    logger.warning(f"  [{current_idx}] Double-click did not open detail pane.")
+
+                            if not selection_successful:
+                                # Fallback 2: Use "Actions" kebab menu in the row
+                                logger.info(f"  [{current_idx}] Falling back to 'Actions' kebab menu...")
+                                actions_btn = row.locator("button[aria-label='Actions'], .entries-list-actions-button").first
+                                if actions_btn.count() > 0:
+                                    actions_btn.click(force=True)
+                                    # Look for "Edit" or "Open" in the menu
+                                    menu_item = page.locator(".sapMMenuItemText:has-text('Edit'), .sapMMenuItemText:has-text('Open'), [role='menuitem']:has-text('Edit')").first
+                                    if menu_item.count() > 0:
+                                        menu_item.click()
+                                        try:
+                                            page.wait_for_selector("[data-nuiexp*='field']", timeout=5000)
+                                            selection_successful = True
+                                        except: pass
                             
                             if selection_successful:
                                 break
                                 
-                            # Fallback: Double click the row
-                            logger.info(f"  [{current_idx}] Falling back to double-click on row...")
-                            row.dblclick(force=True)
-                            page.wait_for_timeout(3000)
-                            
-                            # Check if detail pane is open
-                            if page.locator("#sapcnqr-layout-side-panel-elements, .sapcnqr-layout-side-panel__elements, [data-nuiexp*='panel']").filter(visible=True).count() > 0:
-                                logger.info(f"  [{current_idx}] Detail pane opened via double-click.")
-                                selection_successful = True
-                                break
-                                
                         if not selection_successful:
-                            raise Exception(f"Failed to enable 'Edit' button for transaction index {current_idx}")
+                            raise Exception(f"Failed to open transaction detail pane for index {current_idx}")
                         
+                        # Extra wait for stability
                         page.wait_for_timeout(2000)
-                        self._take_screenshot(page, f"transaction_{current_idx}_details_open_attempt")
+                        self._take_screenshot(page, f"transaction_{current_idx}_details_opened")
 
                         # Now verify if we have inputs. If not, we might need to wait more.
                         # The fields might be in the row (inline) or in a detail pane (right side)
