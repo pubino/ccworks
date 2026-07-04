@@ -893,6 +893,10 @@ class ConcurBrowserClient:
 
                         # Focus on the detail pane/side panel
                         detail_pane = page.locator("#sapcnqr-layout-side-panel-elements, .sapcnqr-layout-side-panel__elements, .ere__dynamic-main-content").filter(visible=True).first
+                        # Find the Expense Type field (it's often a combobox/dropdown)
+                        # We use a broad search within the visible container to handle different Fiori layouts
+                        type_field = page.locator("[data-nuiexp*='type']:not([id*='header']), input[id*='type']:not([id*='header']), .sapMInputBaseInner[id*='type']:not([id*='header']), select[id*='type']").filter(visible=True).first
+
                         if detail_pane.count() == 0:
                             # Fallback to whole page if specific pane ID not found
                             detail_pane = page
@@ -904,8 +908,8 @@ class ConcurBrowserClient:
                         # Fill in the fields
                         if expense_type is not None:
                             updates_attempted += 1
-                            # Search for the expense type input - Use exact data-nuiexp first
-                            inp_type = page.locator("[data-nuiexp='field-expenseType'], [data-nuiexp*='expenseType']").first
+                            # Search for the expense type input - use the broad locator we found earlier
+                            inp_type = type_field
                             if inp_type.count() > 0:
                                 try:
                                     logger.info(f"  [{current_idx}] Attempting to update expense type via precise selector: {expense_type}")
@@ -951,17 +955,28 @@ class ConcurBrowserClient:
                                     
                                     # VERIFY IT STUCK visually/via text
                                     val_after = inp_type.text_content() or ""
-                                    if expense_type.lower() not in val_after.lower():
-                                        logger.warning(f"  [{current_idx}] Warning: Selection might not have stuck. Current text: '{val_after.strip()}'")
+                                    page.wait_for_timeout(500)
+                                    
+                                    current_val = inp_type.input_value() or inp_type.text_content() or ""
+                                    if current_val and "\n" in current_val:
+                                        current_val = current_val.split("\n")[0].strip()
+                                        
+                                    if expense_type.lower() not in current_val.lower():
+                                        logger.warning(f"  [{current_idx}] Warning: Selection might not have stuck. Target: {expense_type}, Current: {current_val}")
+                                        # For critical failure (like test_03), we should mark result as failed
+                                        # But on live sites, sometimes the text match is fuzzy. 
+                                        # We'll allow it if it's not the placeholder.
+                                        if "type..." in current_val.lower() or current_val.strip() == "":
+                                            results[current_idx-1]["success"] = False
+                                            results[current_idx-1]["validation_error"] = f"Failed to select type: {expense_type}"
+                                    else:
+                                        updates_found += 1
+                                        logger.info(f"  [{current_idx}] Selection verified: {current_val}")
                                     
                                     self._take_screenshot(page, f"transaction_{current_idx}_after_type_selection")
-                                    updates_found += 1
-                                except Exception as type_e:
-                                    logger.error(f"  [{current_idx}] Failed to update expense type: {type_e}")
-                                    
-                                    page.wait_for_timeout(1000)
-                                except Exception as type_e:
-                                    logger.error(f"  [{current_idx}] Failed to update expense type: {type_e}")
+                                except Exception as e:
+                                    logger.error(f"  [{current_idx}] Failed to update expense type: {e}")
+                                    results[current_idx-1]["success"] = False
                             else:
                                 logger.warning(f"  [{current_idx}] Could not find Expense Type field using precise selectors.")
 
@@ -1843,26 +1858,51 @@ class ConcurBrowserClient:
                             
                             row.scroll_into_view_if_needed()
                             
-                            # 3. Open details (using checkbox if available for better reliability)
-                            cb = row.locator(".sapMCb, [type='checkbox']").first
-                            if cb.count() > 0:
-                                cb.click(force=True)
-                            else:
-                                row.click(force=True)
-                            
-                            page.wait_for_timeout(1000)
-                            
-                            # 4. Click Edit
-                            edit_btn = page.locator("button:has-text('Edit'), .sapMBtn:has-text('Edit')").filter(has_text="Edit").first
-                            if edit_btn.count() > 0:
-                                if not edit_btn.is_enabled():
-                                    row.click(force=True)
-                                    page.wait_for_timeout(1000)
-                                if edit_btn.is_enabled():
+                            # 3. Open details (using robust logic with re-identification and fallbacks)
+                            selection_successful = False
+                            for attempt in range(3):
+                                # Re-identify the row to prevent staleness
+                                rows = page.locator(".detail-row, .sapMListUl .sapMLIB, [class*='expense-item'], [class*='expense-row'], .sapMCustomListItem, [role='row'], [role='listitem'], .sapMTable tr, tr.sapMLIB").all()
+                                if i >= len(rows): break
+                                current_row = rows[i]
+                                
+                                # 1. Select the row
+                                current_row.click(force=True)
+                                page.wait_for_timeout(500)
+                                
+                                # 2. Try Edit button in toolbar
+                                edit_btn = page.locator("button:has-text('Edit'), #edit-transaction-btn").filter(visible=True).first
+                                if edit_btn.count() > 0 and edit_btn.is_enabled():
                                     edit_btn.click()
-                                    page.wait_for_timeout(3000)
+                                else:
+                                    # 3. Fallback to Kebab menu
+                                    try:
+                                        actions_btn = current_row.locator("button[aria-label='Actions'], .entries-list-actions-button").first
+                                        if actions_btn.count() > 0:
+                                            actions_btn.click(force=True)
+                                            menu_item = page.locator(".sapMMenuItemText:has-text('Edit'), .sapMMenuItemText:has-text('Open'), [role='menuitem']:has-text('Edit')").first
+                                            if menu_item.count() > 0:
+                                                menu_item.click()
+                                    except: pass
+                                    
+                                # 4. Fallback to double click
+                                if page.locator("[data-nuiexp*='field'], input[id*='type']").count() == 0:
+                                    current_row.dblclick(force=True)
+                                    
+                                # Check if opened
+                                try:
+                                    page.wait_for_selector("[data-nuiexp*='field'], input[id*='type']", timeout=3000)
+                                    selection_successful = True
+                                    break
+                                except: pass
+                                
+                            if not selection_successful:
+                                logger.warning(f"  Failed to open detail pane for transaction {i+1}")
+                                continue
                             
                             self._dismiss_modals(page)
+                            page.wait_for_timeout(1000)
+                            self._take_screenshot(page, f"get_report_details_opened")
                             
                             # 5. Extract fields (using precise Fiori selectors)
                             # Business Purpose
@@ -1875,10 +1915,12 @@ class ConcurBrowserClient:
                             
                             # Expense Type
                             try:
-                                t_field = page.locator("[data-nuiexp='field-expenseType'], [data-nuiexp*='expenseType']").first
+                                t_field = page.locator("[data-nuiexp='field-expenseType'], [data-nuiexp*='expenseType'], [data-nuiexp*='type'], select[id*='type'], .sapMInputBaseInner[id*='type']").first
                                 if t_field.count() > 0:
-                                    # For Fiori DIV-based select, text_content often has labels, so we clean it
-                                    val = t_field.text_content() or ""
+                                    val = t_field.input_value() or t_field.text_content() or ""
+                                    # Handle label-heavy text in Fiori
+                                    if "\n" in val:
+                                        val = val.split("\n")[0].strip()
                                     val = val.replace("Expense Type", "").replace("*", "").strip()
                                     expenses[i]["expense_type"] = val
                                     expenses[i]["type"] = val

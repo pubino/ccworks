@@ -89,7 +89,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </div>
 
     <!-- Transaction Detail Side Panel (Simulated) -->
-    <div id="sapcnqr-layout-side-panel-elements" style="display:none; position:fixed; right:0; top:0; width:400px; height:100%; background:white; border-left:1px solid #ccc; padding:20px; box-shadow:-2px 0 5px rgba(0,0,0,0.1); z-index:5000;">
+    <div id="sapcnqr-layout-side-panel-elements" class="sapcnqr-layout-side-panel__elements ere__dynamic-main-content" style="display:none; position:fixed; right:0; top:0; width:400px; height:100%; background:white; border-left:1px solid #ccc; padding:20px; box-shadow:-2px 0 5px rgba(0,0,0,0.1); z-index:5000;">
         <h2>Expense Details</h2>
         <div id="detail-pane-content"></div>
     </div>
