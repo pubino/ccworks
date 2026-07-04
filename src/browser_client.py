@@ -901,6 +901,9 @@ class ConcurBrowserClient:
                                     if clear_btn.count() > 0 and clear_btn.is_visible():
                                         clear_btn.click()
                                         page.wait_for_timeout(500)
+                                        # Re-click the trigger to focus after clear
+                                        trigger = page.locator("[data-nuiexp='field-expenseType__trigger']").first
+                                        if trigger.count() > 0: trigger.click()
                                     else:
                                         # Use keyboard to clear
                                         page.keyboard.press("Control+A")
@@ -908,11 +911,12 @@ class ConcurBrowserClient:
                                     
                                     # Type with delay to trigger suggestions
                                     page.keyboard.type(expense_type, delay=100)
-                                    page.wait_for_timeout(2000)
+                                    # Wait for suggestions to appear
+                                    page.wait_for_timeout(2500)
                                     
                                     # Look for the matching item in the dropdown list (Fiori specific)
-                                    # The list items often have specific classes or roles
-                                    list_item = page.locator(".sapMStandardListItem, .sapMLIB, [role='listitem'], .sapMComboBoxBaseItem, .suggestion-item, .sapMSelectListItem").filter(has_text=re.compile(f"^{re.escape(expense_type)}$", re.I)).first
+                                    # Use a broader selector for the list items
+                                    list_item = page.locator(".sapMStandardListItem, .sapMLIB, [role='listitem'], .sapMComboBoxBaseItem, .suggestion-item, .sapMSelectListItem, .sapMListUl li").filter(has_text=re.compile(f"^{re.escape(expense_type)}$", re.I)).first
                                     if list_item.count() > 0 and list_item.is_visible():
                                         list_item.click(force=True)
                                         logger.info(f"  [{current_idx}] Selected matching item from dropdown list")
@@ -983,6 +987,20 @@ class ConcurBrowserClient:
                                     except: pass
                                     
                                     btn.click(force=True)
+                                    page.wait_for_timeout(2000)
+                                    
+                                    # Check if an error modal appeared (blocking save)
+                                    error_modal = page.locator(".sapMDialog, [role='dialog']").filter(has_text=re.compile(r"Error|provide valid information", re.I)).first
+                                    if error_modal.count() > 0 and error_modal.is_visible(timeout=2000):
+                                        modal_msg = error_modal.text_content() or ""
+                                        logger.error(f"  [{current_idx}] Save failed with error modal: {modal_msg.strip()[:100]}...")
+                                        # Dismiss modal
+                                        close_btn = error_modal.locator("button:has-text('Close'), button:has-text('OK')").first
+                                        if close_btn.count() > 0: close_btn.click()
+                                        else: page.keyboard.press("Escape")
+                                        saved = False # Reset saved status
+                                        break # Don't try other save buttons if one triggered an error
+                                    
                                     saved = True
                                     logger.info(f"  [{current_idx}] Clicked Save button: {sel}")
                                     break
