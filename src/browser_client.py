@@ -4,7 +4,7 @@ import time
 import logging
 import contextlib
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 # Configure logging
