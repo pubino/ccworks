@@ -1869,53 +1869,34 @@ class ConcurBrowserClient:
                             
                             self._dismiss_modals(page)
                             
-                            # 5. Extract fields (using robust label-based lookup)
+                            # 5. Extract fields (using precise Fiori selectors)
                             # Business Purpose
                             try:
-                                # Try label-based first
-                                p_label = page.locator("label:has-text('Business Purpose')").first
-                                p_id = p_label.get_attribute("for") if p_label.count() > 0 else None
-                                if p_id:
-                                    expenses[i]["business_purpose"] = page.locator(f"#{p_id}").input_value().strip()
-                                else:
-                                    # Fallback to data-nuiexp
-                                    p_field = page.locator("[data-nuiexp*='purpose']").first
-                                    if p_field.count() > 0:
-                                        expenses[i]["business_purpose"] = p_field.input_value().strip()
+                                p_field = page.locator("[data-nuiexp='field-businessPurpose'], [data-nuiexp*='businessPurpose']").first
+                                if p_field.count() > 0:
+                                    val = p_field.input_value() or p_field.text_content() or ""
+                                    expenses[i]["business_purpose"] = " ".join(val.split()).strip()
                             except: pass
                             
                             # Expense Type
                             try:
-                                t_label = page.locator("label:has-text('Expense Type')").first
-                                t_id = t_label.get_attribute("for") if t_label.count() > 0 else None
-                                if t_id:
-                                    val = page.locator(f"#{t_id}").input_value().strip()
+                                t_field = page.locator("[data-nuiexp='field-expenseType'], [data-nuiexp*='expenseType']").first
+                                if t_field.count() > 0:
+                                    # For Fiori DIV-based select, text_content often has labels, so we clean it
+                                    val = t_field.text_content() or ""
+                                    val = val.replace("Expense Type", "").replace("*", "").strip()
                                     expenses[i]["expense_type"] = val
                                     expenses[i]["type"] = val
-                                else:
-                                    # Fallback to data-nuiexp
-                                    t_field = page.locator("[data-nuiexp*='type']").first
-                                    if t_field.count() > 0:
-                                        val = t_field.input_value().strip()
-                                        expenses[i]["expense_type"] = val
-                                        expenses[i]["type"] = val
                             except: pass
                             
                             # Comment
                             try:
-                                c_label = page.locator("label:has-text('Comment')").first
-                                c_id = c_label.get_attribute("for") if c_label.count() > 0 else None
-                                if c_id:
-                                    val = page.locator(f"#{c_id}").input_value().strip()
+                                c_field = page.locator("[data-nuiexp='field-comment'], [data-nuiexp*='comment']").first
+                                if c_field.count() > 0:
+                                    val = c_field.input_value() or c_field.text_content() or ""
+                                    val = " ".join(val.split()).strip()
                                     if val.lower() not in ["", "comment", "comments", "show comments"]:
                                         expenses[i]["comment"] = val
-                                else:
-                                    # Fallback to data-nuiexp
-                                    c_field = page.locator("textarea[data-nuiexp*='comment'], [data-nuiexp*='comment']").first
-                                    if c_field.count() > 0:
-                                        val = c_field.input_value().strip()
-                                        if val.lower() not in ["", "comment", "comments", "show comments"]:
-                                            expenses[i]["comment"] = val
                             except: pass
                             
                             # 6. Back to list
