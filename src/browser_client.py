@@ -792,17 +792,38 @@ class ConcurBrowserClient:
                                 row.click(force=True)
                                 page.wait_for_timeout(1000)
                             
-                            # 3. Final verification of 'Edit' button
-                            edit_btn = page.locator("button:has-text('Edit'), .sapMBtn:has-text('Edit')").filter(has_text="Edit").first
-                            if edit_btn.count() > 0 and edit_btn.is_enabled():
-                                logger.info(f"  [{current_idx}] 'Edit' button is enabled.")
-                                edit_btn.click()
-                                selection_successful = True
-                                break
+                            # 3. Final verification of 'Edit' button or Detail pane
+                            edit_btn_selectors = [
+                                "button:has-text('Edit')",
+                                ".sapMBtn:has-text('Edit')",
+                                "[data-nuiexp='edit-button']",
+                                "button[title='Edit']"
+                            ]
                             
-                            # Check if detail pane is already open
-                            if page.locator("#sapcnqr-layout-side-panel-elements, .sapcnqr-layout-side-panel__elements").filter(visible=True).count() > 0:
-                                logger.info(f"  [{current_idx}] Detail pane already open.")
+                            for sel in edit_btn_selectors:
+                                btn = page.locator(sel).first
+                                if btn.count() > 0 and btn.is_visible():
+                                    try:
+                                        # Wait for it to be enabled (Concur Fiori delay)
+                                        btn.wait_for_element_state("enabled", timeout=5000)
+                                        logger.info(f"  [{current_idx}] 'Edit' button enabled, clicking.")
+                                        btn.click(force=True)
+                                        selection_successful = True
+                                        break
+                                    except:
+                                        logger.warning(f"  [{current_idx}] 'Edit' button visible but not enabled yet.")
+                            
+                            if selection_successful:
+                                break
+                                
+                            # Fallback: Double click the row
+                            logger.info(f"  [{current_idx}] Falling back to double-click on row...")
+                            row.dblclick(force=True)
+                            page.wait_for_timeout(3000)
+                            
+                            # Check if detail pane is open
+                            if page.locator("#sapcnqr-layout-side-panel-elements, .sapcnqr-layout-side-panel__elements, [data-nuiexp*='panel']").filter(visible=True).count() > 0:
+                                logger.info(f"  [{current_idx}] Detail pane opened via double-click.")
                                 selection_successful = True
                                 break
                                 
