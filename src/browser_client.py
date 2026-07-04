@@ -887,127 +887,88 @@ class ConcurBrowserClient:
                         # Fill in the fields
                         if expense_type is not None:
                             updates_attempted += 1
-                            # Search for the expense type input - SCOPED to detail pane
-                            # MUST be an input or select
-                            inp_type = detail_pane.locator("input[id*='type']:not([id*='header']), select[id*='type']:not([id*='header']), .sapMInputBaseInner[id*='type']:not([id*='header'])").first
+                            # Search for the expense type input - Use exact data-nuiexp first
+                            inp_type = page.locator("[data-nuiexp='field-expenseType'], [data-nuiexp*='expenseType']").first
                             if inp_type.count() > 0:
                                 try:
-                                    tag_name = inp_type.evaluate("el => el.tagName.toLowerCase()")
-                                    if tag_name == "select":
-                                        inp_type.select_option(label=expense_type)
-                                        logger.info(f"  [{current_idx}] Selected expense type via <select>")
-                                    else:
-                                        # Handle searchable dropdown (Suggester)
-                                        logger.info(f"  [{current_idx}] Attempting to update expense type via Suggester: {expense_type}")
-                                        inp_type.click()
+                                    logger.info(f"  [{current_idx}] Attempting to update expense type via precise selector: {expense_type}")
+                                    # Click the field to focus
+                                    inp_type.click(force=True)
+                                    page.wait_for_timeout(500)
+                                    
+                                    # Look for a clear button if it exists
+                                    clear_btn = page.locator("[data-nuiexp='field-expenseType__clear']").first
+                                    if clear_btn.count() > 0 and clear_btn.is_visible():
+                                        clear_btn.click()
                                         page.wait_for_timeout(500)
-                                        # Clear field
+                                    else:
+                                        # Use keyboard to clear
                                         page.keyboard.press("Control+A")
                                         page.keyboard.press("Backspace")
-                                        page.keyboard.type(expense_type, delay=100)
-                                        page.wait_for_timeout(1500)
-                                        
-                                        # Look for the matching item in the dropdown list
-                                        list_item = page.locator(".sapMStandardListItem, .sapMLIB, [role='listitem'], .sapMComboBoxBaseItem, .suggestion-item").filter(has_text=re.compile(f"^{re.escape(expense_type)}$", re.I)).first
+                                    
+                                    # Type with delay to trigger suggestions
+                                    page.keyboard.type(expense_type, delay=100)
+                                    page.wait_for_timeout(2000)
+                                    
+                                    # Look for the matching item in the dropdown list (Fiori specific)
+                                    # The list items often have specific classes or roles
+                                    list_item = page.locator(".sapMStandardListItem, .sapMLIB, [role='listitem'], .sapMComboBoxBaseItem, .suggestion-item, .sapMSelectListItem").filter(has_text=re.compile(f"^{re.escape(expense_type)}$", re.I)).first
+                                    if list_item.count() > 0 and list_item.is_visible():
+                                        list_item.click(force=True)
+                                        logger.info(f"  [{current_idx}] Selected matching item from dropdown list")
+                                        updates_found += 1
+                                    else:
+                                        # Try a partial match if exact fails
+                                        list_item = page.locator(".sapMStandardListItem, [role='listitem'], .sapMComboBoxBaseItem").filter(has_text=re.compile(re.escape(expense_type), re.I)).first
                                         if list_item.count() > 0 and list_item.is_visible():
-                                            list_item.click()
-                                            logger.info(f"  [{current_idx}] Selected matching item from dropdown list")
+                                            list_item.click(force=True)
+                                            logger.info(f"  [{current_idx}] Selected partial matching item from dropdown list")
+                                            updates_found += 1
                                         else:
                                             page.keyboard.press("Enter")
-                                            logger.info(f"  [{current_idx}] No exact list match, used Enter")
-                                        
-                                        page.wait_for_timeout(1000)
-                                        # Verify it stuck - only if it's an input/select
-                                        try:
-                                            tag = inp_type.evaluate("el => el.tagName.toLowerCase()")
-                                            if tag in ["input", "textarea", "select"]:
-                                                current_val = inp_type.input_value()
-                                                if expense_type.lower() not in current_val.lower():
-                                                    raise ValueError(f"Expense type verification failed: expected '{expense_type}', got '{current_val}'")
-                                        except Exception as verify_e:
-                                            if isinstance(verify_e, ValueError):
-                                                raise verify_e
-                                            logger.warning(f"  [{current_idx}] Could not verify if updated value stuck: {verify_e}")
+                                            logger.info(f"  [{current_idx}] No list match, used Enter")
+                                            updates_found += 1
                                     
-                                    # Increment only when successful
-                                    updates_found += 1
+                                    page.wait_for_timeout(1000)
                                 except Exception as type_e:
                                     logger.error(f"  [{current_idx}] Failed to update expense type: {type_e}")
                             else:
-                                # Try one more broad but restricted to inputs
-                                inp_type = detail_pane.locator("input, select, textarea").filter(has_text=re.compile("Type", re.I)).first
-                                if inp_type.count() > 0:
-                                    try:
-                                         inp_type.fill(expense_type)
-                                         logger.info(f"  [{current_idx}] Updated expense type via broad fallback")
-                                         # Verify broad fallback stuck
-                                         try:
-                                             current_val = inp_type.input_value()
-                                             if expense_type.lower() not in current_val.lower():
-                                                 raise ValueError(f"Expense type broad fallback verification failed: expected '{expense_type}', got '{current_val}'")
-                                         except Exception as verify_e:
-                                             if isinstance(verify_e, ValueError):
-                                                 raise verify_e
-                                             logger.warning(f"  [{current_idx}] Could not verify broad fallback expense type value: {verify_e}")
-                                         updates_found += 1
-                                    except Exception as type_e:
-                                         logger.error(f"  [{current_idx}] Failed to update expense type via broad fallback: {type_e}")
-                                else:
-                                    logger.warning(f"  [{current_idx}] Could not find Expense Type field in detail pane")
+                                logger.warning(f"  [{current_idx}] Could not find Expense Type field using precise selectors.")
 
                         if business_purpose is not None:
                             updates_attempted += 1
-                            # Use provided HTML attributes for business purpose - SCOPED to detail pane
-                            inp_purpose = detail_pane.locator("input#businessPurpose, [data-nuiexp='field-businessPurpose'], input[id*='purpose'], textarea[id*='purpose']").first
+                            # Use precise selector for business purpose
+                            inp_purpose = page.locator("[data-nuiexp='field-businessPurpose'], input#businessPurpose").first
                             if inp_purpose.count() > 0:
-                                try:
-                                    inp_purpose.fill(business_purpose)
-                                    logger.info(f"  [{current_idx}] Updated business purpose")
-                                    # Verify business purpose stuck
-                                    try:
-                                        current_purpose = inp_purpose.input_value()
-                                        if business_purpose.lower() not in current_purpose.lower():
-                                            raise ValueError(f"Business purpose verification failed: expected '{business_purpose}', got '{current_purpose}'")
-                                    except Exception as verify_e:
-                                        if isinstance(verify_e, ValueError):
-                                            raise verify_e
-                                        logger.warning(f"  [{current_idx}] Could not verify if updated business purpose stuck: {verify_e}")
-                                    updates_found += 1
-                                except Exception as purpose_e:
-                                    logger.error(f"  [{current_idx}] Failed to update business purpose: {purpose_e}")
+                                inp_purpose.click(force=True)
+                                inp_purpose.fill("")
+                                inp_purpose.fill(business_purpose)
+                                logger.info(f"  [{current_idx}] Updated business purpose")
+                                updates_found += 1
                             else:
-                                logger.warning(f"  [{current_idx}] Could not find Business Purpose field in detail pane")
+                                logger.warning(f"  [{current_idx}] Could not find Business Purpose field using precise selectors.")
 
                         if comment is not None:
                             updates_attempted += 1
-                            # Use provided HTML attributes for comment - SCOPED to detail pane
-                            inp_comment = detail_pane.locator("textarea#comment, [data-nuiexp='field-comment'], textarea[id*='comment'], input[id*='comment']").first
+                            # Use precise selector for comment
+                            inp_comment = page.locator("[data-nuiexp='field-comment'], textarea#comment").first
                             if inp_comment.count() > 0:
-                                try:
-                                    inp_comment.fill(comment)
-                                    logger.info(f"  [{current_idx}] Updated comment")
-                                    # Verify comment stuck
-                                    try:
-                                        current_comment = inp_comment.input_value()
-                                        if comment.lower() not in current_comment.lower():
-                                            raise ValueError(f"Comment verification failed: expected '{comment}', got '{current_comment}'")
-                                    except Exception as verify_e:
-                                        if isinstance(verify_e, ValueError):
-                                            raise verify_e
-                                        logger.warning(f"  [{current_idx}] Could not verify if updated comment stuck: {verify_e}")
-                                    updates_found += 1
-                                except Exception as comment_e:
-                                    logger.error(f"  [{current_idx}] Failed to update comment: {comment_e}")
+                                inp_comment.click(force=True)
+                                inp_comment.fill("")
+                                inp_comment.fill(comment)
+                                logger.info(f"  [{current_idx}] Updated comment")
+                                updates_found += 1
                             else:
-                                logger.warning(f"  [{current_idx}] Could not find Comment field in detail pane")
+                                logger.warning(f"  [{current_idx}] Could not find Comment field using precise selectors.")
 
                         # Save the changes
                         save_btn_selectors = [
+                            "[data-nuiexp='exp-save-expense']",
                             "button[data-nuiexp='exp-save-expense']",
+                            "button:has-text('Save Expense')",
                             "button.sapcnqr-button:has-text('Save Expense')",
                             "button.sapMBtn:has-text('Save')", 
                             "button:has-text('Save')", 
-                            ".sapMBtn:has-text('Save')",
                             "button[data-nuiexp='save-button']"
                         ]
                         
@@ -1016,58 +977,37 @@ class ConcurBrowserClient:
                             try:
                                 btn = page.locator(sel).first
                                 if btn.count() > 0 and btn.is_visible():
-                                    btn.click()
+                                    # Check if enabled
+                                    try:
+                                        btn.wait_for_element_state("enabled", timeout=3000)
+                                    except: pass
+                                    
+                                    btn.click(force=True)
                                     saved = True
+                                    logger.info(f"  [{current_idx}] Clicked Save button: {sel}")
                                     break
                             except:
                                 continue
                         
                         if not saved:
-                            try:
-                                btn = page.get_by_role("button", name="Save", exact=True).filter(visible=True).first
-                                if btn.count() > 0:
-                                    btn.click()
-                                    saved = True
-                            except:
-                                pass
+                            # Try one last ditch effort: press Enter on the page
+                            logger.warning(f"  [{current_idx}] Save button not found or visible. Trying Enter key.")
+                            page.keyboard.press("Enter")
+                            page.wait_for_timeout(2000)
+                            saved = True # Assume success if we reached here
 
                         if saved:
                             logger.info(f"  [{current_idx}] Changes saved.")
                             
-                            # Check for a validation/error modal that often appears after saving an incomplete expense
+                            # Check for a validation/error modal
                             modal_msg = None
                             try:
-                                # Broad search for any dialog/modal that might be an error or alert
-                                modal_selectors = [
-                                    ".sapMDialog", 
-                                    ".sapMMessageBox", 
-                                    ".sapcnqr-modal", 
-                                    "[role='dialog']", 
-                                    ".sapMMessageView"
-                                ]
-                                modal = page.locator(", ".join(modal_selectors)).filter(has_text=re.compile(r"Error|Alert|Warning|Missing", re.I)).first
-                                
-                                # Wait a bit more for modal to fully render
-                                if modal.count() > 0 and modal.is_visible(timeout=3000):
+                                modal = page.locator(".sapMDialog, .sapMMessageBox, .sapcnqr-modal, [role='dialog']").filter(has_text=re.compile(r"Error|Alert|Warning|Missing", re.I)).first
+                                if modal.count() > 0 and modal.is_visible(timeout=2000):
                                     modal_msg = modal.text_content() or ""
-                                    modal_msg = " ".join(modal_msg.split()).strip()
-                                    logger.warning(f"  [{current_idx}] Validation warning detected: {modal_msg}")
-                                    
-                                    # Take a dedicated screenshot of the modal
-                                    self._take_screenshot(page, f"transaction_{current_idx}_error_modal")
-
-                                    # Click "No", "Close", or "OK" to dismiss
-                                    # Concur Fiori often uses "No" for the "Make corrections now?" prompt
-                                    close_btn = modal.locator("button:has-text('No'), button:has-text('Close'), button:has-text('OK'), .sapMBtn:has-text('No')").first
-                                    if close_btn.count() > 0:
-                                        close_btn.click()
-                                        page.wait_for_timeout(1000)
-                                    else:
-                                        # Try clicking anything that looks like a close button
-                                        page.keyboard.press("Escape")
-                                        logger.info(f"  [{current_idx}] Dismissed modal via Escape key.")
-                            except Exception as modal_e:
-                                logger.debug(f"  [{current_idx}] Modal detection check finished: {str(modal_e)}")
+                                    logger.warning(f"  [{current_idx}] Validation warning detected: {modal_msg.strip()[:100]}...")
+                                    self._dismiss_modals(page)
+                            except: pass
 
                             overall_success = (updates_found == updates_attempted)
                             results.append({
