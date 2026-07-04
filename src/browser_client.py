@@ -1671,22 +1671,18 @@ class ConcurBrowserClient:
                             except:
                                 pass
 
-                        # Prepare the expense object
+                        # Final object construction
                         exp_obj = {
                             "index": idx,
                             "date": date_str,
                             "expense_type": exp_type,
                             "vendor": vendor,
                             "amount": amount,
+                            "business_purpose": business_purpose if business_purpose.lower() not in ["", "unknown"] else "",
+                            "comment": comment_field if comment_field.lower() not in ["", "unknown", "show comments", "comment", "comments"] else "",
                             "raw_text": text
                         }
                         
-                        # Only include purpose and comment if they were successfully extracted
-                        if business_purpose != "Unknown" and business_purpose is not None:
-                            exp_obj["business_purpose"] = business_purpose
-                        if comment_field != "Unknown" and comment_field is not None:
-                            exp_obj["comment"] = comment_field
-                            
                         expenses.append(exp_obj)
                     except Exception:
                         continue
@@ -1704,7 +1700,16 @@ class ConcurBrowserClient:
                             
                             # 1. Clear modals and wait for list
                             self._dismiss_modals(page)
-                            page.wait_for_selector(", ".join(row_selectors), timeout=10000)
+                            try:
+                                page.wait_for_selector(", ".join(row_selectors), timeout=20000, state="visible")
+                            except Exception as e:
+                                logger.warning(f"  Transaction list not immediately visible after back/cancel: {e}")
+                                # Try one more wait or refresh
+                                page.wait_for_timeout(2000)
+                                if page.locator(", ".join(row_selectors)).count() == 0:
+                                    logger.error("  List still not found. Attempting to scroll.")
+                                    page.mouse.wheel(0, 500)
+                                    page.wait_for_timeout(1000)
                             
                             # 2. Re-identify valid rows to avoid staleness
                             all_rows = page.locator(", ".join(row_selectors)).all()
@@ -1778,27 +1783,44 @@ class ConcurBrowserClient:
                                 c_label = page.locator("label:has-text('Comment')").first
                                 c_id = c_label.get_attribute("for") if c_label.count() > 0 else None
                                 if c_id:
-                                    expenses[i]["comment"] = page.locator(f"#{c_id}").input_value().strip()
+                                    val = page.locator(f"#{c_id}").input_value().strip()
+                                    if val.lower() not in ["", "comment", "comments", "show comments"]:
+                                        expenses[i]["comment"] = val
                                 else:
                                     # Fallback to data-nuiexp
                                     c_field = page.locator("textarea[data-nuiexp*='comment'], [data-nuiexp*='comment']").first
                                     if c_field.count() > 0:
-                                        expenses[i]["comment"] = c_field.input_value().strip()
+                                        val = c_field.input_value().strip()
+                                        if val.lower() not in ["", "comment", "comments", "show comments"]:
+                                            expenses[i]["comment"] = val
                             except: pass
                             
                             # 6. Back to list
                             back_selectors = [
                                 ".sapcnqr-icon--nav-back",
                                 "button:has-text('Cancel')",
-                                "[data-nuiexp='exit-full-screen-button']"
+                                "button:has-text('Back')",
+                                "[data-nuiexp='exit-full-screen-button']",
+                                ".sapMBtnBack",
+                                "button[title*='Back']",
+                                "button[aria-label*='Back']"
                             ]
+                            clicked_back = False
                             for sel in back_selectors:
                                 btn = page.locator(sel).first
                                 if btn.count() > 0 and btn.is_visible():
+                                    logger.info(f"  Clicking back/cancel button using selector: {sel}")
                                     self._dismiss_modals(page)
                                     btn.click(force=True)
-                                    page.wait_for_timeout(2000)
+                                    clicked_back = True
+                                    page.wait_for_timeout(3000)
                                     break
+                            
+                            if not clicked_back:
+                                # Try to click outside or press Escape as a last resort
+                                logger.warning("  No back button found. Trying Escape key.")
+                                page.keyboard.press("Escape")
+                                page.wait_for_timeout(2000)
                             
                         except Exception as e:
                             logger.error(f"  Failed to deep scan transaction {idx}: {e}")
