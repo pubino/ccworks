@@ -821,8 +821,13 @@ class ConcurBrowserClient:
                             # Fallback to whole page if specific pane ID not found
                             detail_pane = page
                         
+                        # Tracking successes
+                        updates_attempted = 0
+                        updates_found = 0
+                        
                         # Fill in the fields
                         if expense_type is not None:
+                            updates_attempted += 1
                             # Search for the expense type input - SCOPED to detail pane
                             # MUST be an input or select
                             inp_type = detail_pane.locator("input[id*='type']:not([id*='header']), select[id*='type']:not([id*='header']), .sapMInputBaseInner[id*='type']:not([id*='header'])").first
@@ -832,6 +837,7 @@ class ConcurBrowserClient:
                                     if tag_name == "select":
                                         inp_type.select_option(label=expense_type)
                                         logger.info(f"  [{current_idx}] Selected expense type via <select>")
+                                        updates_found += 1
                                     else:
                                         # Handle searchable dropdown (Suggester)
                                         logger.info(f"  [{current_idx}] Attempting to update expense type via Suggester: {expense_type}")
@@ -848,9 +854,12 @@ class ConcurBrowserClient:
                                         if list_item.count() > 0 and list_item.is_visible():
                                             list_item.click()
                                             logger.info(f"  [{current_idx}] Selected matching item from dropdown list")
+                                            updates_found += 1
                                         else:
                                             page.keyboard.press("Enter")
                                             logger.info(f"  [{current_idx}] No exact list match, used Enter")
+                                            # We count this as found because we filled it
+                                            updates_found += 1
                                         
                                         page.wait_for_timeout(1000)
                                         # Verify it stuck - only if it's an input/select
@@ -865,27 +874,31 @@ class ConcurBrowserClient:
                                 # Try one more broad but restricted to inputs
                                 inp_type = detail_pane.locator("input, select, textarea").filter(has_text=re.compile("Type", re.I)).first
                                 if inp_type.count() > 0:
-                                     # ... same logic or just fill
                                      inp_type.fill(expense_type)
                                      logger.info(f"  [{current_idx}] Updated expense type via broad fallback")
+                                     updates_found += 1
                                 else:
                                     logger.warning(f"  [{current_idx}] Could not find Expense Type field in detail pane")
 
                         if business_purpose is not None:
+                            updates_attempted += 1
                             # Use provided HTML attributes for business purpose - SCOPED to detail pane
                             inp_purpose = detail_pane.locator("input#businessPurpose, [data-nuiexp='field-businessPurpose'], input[id*='purpose'], textarea[id*='purpose']").first
                             if inp_purpose.count() > 0:
                                 inp_purpose.fill(business_purpose)
                                 logger.info(f"  [{current_idx}] Updated business purpose")
+                                updates_found += 1
                             else:
                                 logger.warning(f"  [{current_idx}] Could not find Business Purpose field in detail pane")
 
                         if comment is not None:
+                            updates_attempted += 1
                             # Use provided HTML attributes for comment - SCOPED to detail pane
                             inp_comment = detail_pane.locator("textarea#comment, [data-nuiexp='field-comment'], textarea[id*='comment'], input[id*='comment']").first
                             if inp_comment.count() > 0:
                                 inp_comment.fill(comment)
                                 logger.info(f"  [{current_idx}] Updated comment")
+                                updates_found += 1
 
                         # Save the changes
                         save_btn_selectors = [
@@ -955,10 +968,11 @@ class ConcurBrowserClient:
                             except Exception as modal_e:
                                 logger.debug(f"  [{current_idx}] Modal detection check finished: {str(modal_e)}")
 
+                            overall_success = (updates_found == updates_attempted)
                             results.append({
                                 "index": current_idx, 
-                                "success": True, 
-                                "partial_success": modal_msg is not None,
+                                "success": overall_success, 
+                                "partial_success": not overall_success and updates_found > 0,
                                 "validation_error": modal_msg
                             })
                         else:
@@ -982,8 +996,7 @@ class ConcurBrowserClient:
                 return {
                     "success": any(r["success"] for r in results),
                     "report_name": report_name,
-                    "results": results,
-                    "comment": comment
+                    "results": results
                 }
 
             except Exception as e:
