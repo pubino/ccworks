@@ -2868,22 +2868,23 @@ class ConcurBrowserClient:
                     input_context = page if not has_inline_inputs else row
                     
                     # Expense Type
-                    sel_type = input_context.locator("select.recon-type, select[data-nuiexp*='type'], select[id*='type']").first
+                    sel_type = input_context.locator("select.recon-type, select[data-nuiexp*='type'], select[id*='type'], select.sapMSelect").first
                     if sel_type.count() > 0:
                         sel_type.select_option(label=matched_rule.get("expense_type", ""))
                     
                     # Business Purpose
-                    inp_purpose = input_context.locator("input.recon-purpose, [data-nuiexp*='businessPurpose'], [id*='purpose']").first
+                    # Using more specific selectors to avoid matching static spans like #detail-purpose
+                    inp_purpose = input_context.locator("input.recon-purpose, input[data-nuiexp*='businessPurpose'], input[id*='purpose'], textarea[id*='purpose']").first
                     if inp_purpose.count() > 0:
                         inp_purpose.fill(matched_rule.get("business_purpose", ""))
                     
                     # Comment
-                    inp_comment = input_context.locator("input.recon-comment, textarea.recon-comment, [data-nuiexp*='comment'], [id*='comment']").first
+                    inp_comment = input_context.locator("input.recon-comment, textarea.recon-comment, [data-nuiexp*='comment'], textarea[id*='comment']").first
                     if inp_comment.count() > 0:
                         inp_comment.fill(matched_rule.get("comment", ""))
                     
                     # Allocation Code
-                    inp_alloc = input_context.locator("input.recon-allocation, [id*='allocation']").first
+                    inp_alloc = input_context.locator("input.recon-allocation, input[id*='allocation']").first
                     if inp_alloc.count() > 0:
                         inp_alloc.fill(matched_rule.get("allocation_code", ""))
                     
@@ -2892,7 +2893,7 @@ class ConcurBrowserClient:
                     if receipt_path:
                         import os
                         if os.path.exists(receipt_path):
-                            inp_receipt = input_context.locator("input.recon-receipt-file, input[type='file']").first
+                            inp_receipt = input_context.locator("input.recon-receipt-file, input[type='file'], input[id*='receipt']").first
                             if inp_receipt.count() > 0:
                                 inp_receipt.set_input_files(receipt_path)
                                 page.wait_for_timeout(2000)
@@ -2903,8 +2904,9 @@ class ConcurBrowserClient:
                     # Save this transaction
                     save_btn_selectors = [
                         "button.recon-save-btn",
-                        "[data-nuiexp='exp-save-expense']",
+                        "button[data-nuiexp='exp-save-expense']",
                         "button:has-text('Save Expense')",
+                        "button.sapMBtn:has-text('Save')",
                         "button:has-text('Save')"
                     ]
                     saved = False
