@@ -578,39 +578,62 @@ class ConcurBrowserClient:
                     raise FileNotFoundError(f"No report named '{old_name}' found to edit.")
 
                 # Click "Edit" or open the report
-                edit_btn = card.get_by_role("button", name="Edit", exact=False)
-                if edit_btn.is_visible(timeout=2000):
+                edit_btn = None
+                edit_selectors = [
+                    lambda c: c.get_by_role("button", name="Edit", exact=False),
+                    lambda c: c.get_by_role("button", name="Modify", exact=False),
+                    lambda c: c.locator("button:has-text('Edit')"),
+                    lambda c: c.locator("button:has-text('Modify')")
+                ]
+                for get_sel in edit_selectors:
+                    try:
+                        loc = get_sel(card)
+                        if loc.is_visible(timeout=2000):
+                            edit_btn = loc
+                            break
+                    except: continue
+
+                if edit_btn:
                     edit_btn.click()
                 else:
                     card.first.click()
                     page.wait_for_timeout(2000)
                     
                     # Open 'Report Details' dropdown menu
-                    page.get_by_role("button", name="Report Details", exact=False).click()
-                    page.wait_for_timeout(1000)
+                    details_btn = page.get_by_role("button", name="Report Details", exact=False)
+                    if details_btn.is_visible(timeout=2000):
+                        details_btn.click()
+                        page.wait_for_timeout(1000)
                     
-                    # Locate and click 'Report Header' (or 'Edit Report Info' on legacy UIs)
-                    menu_item = None
-                    menu_selectors = [
-                        lambda p: p.get_by_role("menuitem", name="Report Header", exact=False),
-                        lambda p: p.get_by_role("menuitem", name="Edit Report Info", exact=False),
-                        lambda p: p.locator("text=Report Header"),
-                        lambda p: p.locator("text=Edit Report Info")
-                    ]
-                    for idx, get_sel in enumerate(menu_selectors):
-                        try:
-                            loc = get_sel(page)
-                            if loc.is_visible(timeout=2000):
-                                menu_item = loc
-                                break
-                        except Exception:
-                            continue
+                    # If a dialog is already visible (e.g. from a direct click), we might not need the menu
+                    dialog_selector = "#report-dialog, [role='dialog'][aria-modal='true'], .sapMDialog"
+                    if page.locator(dialog_selector).filter(visible=True).count() == 0:
+                        # Locate and click 'Report Header' (or 'Edit Report Info' on legacy UIs)
+                        menu_item = None
+                        menu_selectors = [
+                            lambda p: p.get_by_role("menuitem", name="Report Header", exact=False),
+                            lambda p: p.get_by_role("menuitem", name="Edit Report Info", exact=False),
+                            lambda p: p.locator("text=Report Header"),
+                            lambda p: p.locator("text=Edit Report Info"),
+                            lambda p: p.get_by_text("Report Header", exact=False),
+                            lambda p: p.get_by_text("Edit Report Info", exact=False)
+                        ]
+                        for idx, get_sel in enumerate(menu_selectors):
+                            try:
+                                loc = get_sel(page)
+                                if loc.is_visible(timeout=2000):
+                                    menu_item = loc
+                                    break
+                            except Exception:
+                                continue
 
-                    if not menu_item:
-                        self._take_screenshot(page, "report_header_menuitem_not_found")
-                        raise RuntimeError("Could not locate 'Report Header' dropdown item.")
-                    
-                    menu_item.click()
+                        if menu_item:
+                            menu_item.click()
+                        else:
+                            # If we still can't find it but a dialog is NOT open, we are stuck
+                            if page.locator(dialog_selector).filter(visible=True).count() == 0:
+                                self._take_screenshot(page, "report_header_menuitem_not_found")
+                                logger.warning("Could not locate 'Report Header' dropdown item, but continuing to see if dialog appeared.")
 
                 page.wait_for_timeout(2000)
                 self._take_screenshot(page, "update_report_dialog")
