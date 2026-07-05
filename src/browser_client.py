@@ -2993,30 +2993,54 @@ class ConcurBrowserClient:
                 input_file = row.locator("input.recon-receipt-file, input[type='file']").first
                 if input_file.count() == 0:
                     logger.info("  Receipt input not found in row. Clicking row to open detail pane...")
+                    
+                    # Try clicking multiple times or different ways to ensure panel opens
                     row.click(force=True)
                     page.wait_for_timeout(2000)
                     
-                    # Try specific side panel selectors
+                    # Check if panel is visible, if not, try clicking the merchant text specifically
                     panel_selectors = [
                         "#sapcnqr-layout-side-panel-elements",
                         ".sapcnqr-layout-side-panel__elements",
                         "[data-nuiexp*='panel']",
-                        ".ere__dynamic-main-content"
+                        ".ere__dynamic-main-content",
+                        ".sapMResponsivePopover"
                     ]
-                    panel = None
-                    for sel in panel_selectors:
-                        p_loc = page.locator(sel).filter(visible=True).first
-                        if p_loc.count() > 0:
-                            panel = p_loc
-                            logger.info(f"  Detected side panel using selector: {sel}")
-                            break
                     
-                    input_context = panel if panel else page
-                    input_file = input_context.locator("input.recon-receipt-file, input[type='file'], input[id*='receipt']").first
+                    panel = None
+                    for _ in range(2): # Try twice
+                        for sel in panel_selectors:
+                            p_loc = page.locator(sel).filter(visible=True).first
+                            if p_loc.count() > 0:
+                                panel = p_loc
+                                break
+                        if panel: break
+                        
+                        logger.info("  Side panel not detected yet. Retrying click on merchant text...")
+                        merchant_elem = row.locator(".recon-merchant, strong, b").first
+                        if merchant_elem.count() > 0:
+                            merchant_elem.click(force=True)
+                        else:
+                            row.click(force=True)
+                        page.wait_for_timeout(2000)
+
+                    if panel:
+                        logger.info(f"  Detected side panel.")
+                        input_file = panel.locator("input.recon-receipt-file, input[type='file'], input[id*='receipt']").first
+                    else:
+                        logger.warning("  Side panel could not be detected. Searching whole page for any file input.")
+                        input_file = page.locator("input.recon-receipt-file, input[type='file'], input[id*='receipt']").first
 
                 if input_file.count() == 0:
                     self._take_screenshot(page, "attach_receipt_input_not_found_debug")
-                    raise RuntimeError(f"Could not find file input for receipt upload in transaction '{merchant_or_id}'.")
+                    # Final attempt: look for ANY input that might be the one
+                    all_inputs = page.locator("input").all()
+                    input_details = []
+                    for inp in all_inputs[:10]:
+                        try:
+                            input_details.append(f"{inp.get_attribute('type') or 'text'}:{inp.get_attribute('class') or ''}:{inp.get_attribute('id') or ''}")
+                        except: pass
+                    raise RuntimeError(f"Could not find file input for receipt upload in transaction '{merchant_or_id}'. Found inputs: {input_details}")
 
                 input_file.set_input_files(receipt_file_path)
                 page.wait_for_timeout(3000)
