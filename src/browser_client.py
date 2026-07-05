@@ -1685,7 +1685,17 @@ class ConcurBrowserClient:
                             continue
 
                         # If we reach here, it's a valid transaction row
-                        if "Select expense" in text:
+                        is_valid = ("Select expense" in text)
+                        
+                        # Fallback for read-only or historical reports that might not have "Select expense" checkbox
+                        if not is_valid:
+                            # If it has Date, Type, and Amount keywords/values, it's likely a valid row
+                            if "Date:" in text and "Type:" in text and "Amount:" in text:
+                                is_valid = True
+                            elif re.search(r'\d{2}/\d{2}/\d{4}.*?\$\d+', text): # Date and Amount pattern
+                                is_valid = True
+                                
+                        if is_valid:
                             valid_rows.append(row)
                         else:
                             continue
@@ -1703,10 +1713,10 @@ class ConcurBrowserClient:
                         # Strategy: Many Concur rows follow: "Select expense, Type, Amount, date, Date Vendor Details..."
                         # Or they are just concatenated.
                         
-                        # Try to find a date (MM/DD/YYYY)
-                        date_match = re.search(r'(\d{2}/\d{2}/\d{4})', text)
+                        # Try to find a date (MM/DD/YYYY or YYYY-MM-DD)
+                        date_match = re.search(r'(\d{2}/\d{2}/\d{4})|(\d{4}-\d{2}-\d{2})', text)
                         if date_match:
-                            date_str = date_match.group(1)
+                            date_str = date_match.group(0)
                             
                         # Try to find an amount ($X.XX)
                         amount_match = re.search(r'(\$\d{1,3}(?:,\d{3})*\.\d{2})', text)
@@ -1718,6 +1728,10 @@ class ConcurBrowserClient:
                         anchor_match = re.search(r'Select expense,\s*(.*?),\s*\$\d{1,3}(?:,\d{3})*\.\d{2},\s*date,', text)
                         if anchor_match:
                             exp_type = anchor_match.group(1)
+                        elif "Type:" in text:
+                            type_match = re.search(r'Type:\s*(.*?)(?:\||$)', text)
+                            if type_match:
+                                exp_type = type_match.group(1).strip()
                         else:
                             # Fallback to comma split if anchor fails
                             parts = [p.strip() for p in text.split(",")]
@@ -1726,7 +1740,11 @@ class ConcurBrowserClient:
 
                         # If we have a vendor/merchant, it's usually between the date and payment type
                         # This is tricky with raw text, so we'll do our best
-                        if date_str and amount:
+                        if "Merchant:" in text:
+                            merchant_match = re.search(r'Merchant:\s*(.*?)(?:\||$)', text)
+                            if merchant_match:
+                                vendor = merchant_match.group(1).strip()
+                        elif date_str and amount:
                             # Try to find vendor between Date and Payment Type or Amount
                             # Example: "06/30/2026Computer Peripherals (OIT use only)ANTHROPIC* CLAUDE TEAMDepartmental Purchasing Card$400.00"
                             pattern = rf'{date_str}.*?{re.escape(exp_type)}?(.*?)(?:Departmental|Corporate|Personal|Cash|{re.escape(amount)})'
