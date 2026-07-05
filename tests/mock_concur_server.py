@@ -391,6 +391,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <label>Allocation Code</label>
                     <input type="text" id="recon-allocation-${idx}" style="width: 100%;" value="${t.allocation_code || ''}">
                 </div>
+                <div class="form-group">
+                    <label>Receipt</label>
+                    <div style="margin-top:5px;">
+                        ${t.receipt ? `<span style="color: blue;" class="receipt-link">${t.receipt}</span>` : `<input type="file" class="recon-receipt-file" onchange="uploadReceiptForTransaction('${selectedReportName}', ${idx}, this.files[0].name)">`}
+                    </div>
+                </div>
                 <div style="margin-top:20px;">
                     <button class="button" style="background:#e0e5ea;" onclick="closeTransactionDetail()">Cancel</button>
                     <button class="button" style="background:#04844b; color:white;" data-nuiexp="exp-save-expense" onclick="saveReconTransaction('${selectedReportName}', ${idx})">Save Expense</button>
