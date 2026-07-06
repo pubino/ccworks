@@ -72,6 +72,8 @@ Build the Python environment, install requirements, and download Playwright chro
 | **Update Report Transaction** | `./kkw update-transaction "Name" [indices...] [args...]` | Bulk update fields (type, justification) of transaction rows in a report. |
 | **Update Report Header** | `./kkw update-report "Name" [--name "New"] [--purpose "P"] [--comment "C"]` | Update report header fields like name, purpose, and comment. |
 | **Submit Report** | `./kkw submit-report "Name"` | Finalize and submit an expense report for approval. |
+| **List Transaction Allocations** | `./kkw allocations "Name"` | List chartstring allocations (Dept, Fund, etc) for a report. |
+| **Add Transaction Allocation** | `./kkw add-allocation "Name" [idx] --dept "D" --fund "F"` | Programmatically set chartstring values for a transaction. |
 
 ---
 
@@ -265,6 +267,46 @@ You can read or write individual transaction fields (Expense Type, Business Purp
         Type:             Ground Transportation
         Business Purpose: Meeting client for lunch
         Comment:          Test comment
+   ```
+
+### 7. Transaction Allocations (Chartstrings)
+
+Automates reading and writing **Chartstrings** (Department, Fund, Program, etc.) for individual transaction rows. This is essential for organizations that require granular cost-center tracking.
+
+* **List Current Allocations:**
+  ```bash
+  # List all allocations for every transaction in a report
+  ./kkw allocations "Project Alpha Report"
+  ```
+  *Output Example:*
+  ```json
+  [
+    {
+      "index": 0,
+      "merchant": "Uber",
+      "allocations": [
+        {
+          "raw_text": "(25605) ORF-Technical Support | (A0001) General Fund | (P999) Research"
+        }
+      ]
+    }
+  ]
+  ```
+
+* **Add a New Allocation (Chartstring):**
+  ```bash
+  # Add a specific chartstring to transaction index 1
+  ./kkw add-allocation "Project Alpha Report" 1 \
+      --dept "(25605) ORF-Technical Support" \
+      --fund "(A0001) General Fund" \
+      --prog "(P999) Research"
+  ```
+  *Output Example:*
+  ```text
+  [SUCCESS] Allocation added to transaction 1 in 'Project Alpha Report'!
+    - Dept: (25605) ORF-Technical Support
+    - Fund: (A0001) General Fund
+    - Prog: (P999) Research
   ```
 
 ---
@@ -295,13 +337,13 @@ The extension is written in TypeScript and is saved at `.pi/extensions/concur.ts
 
 If you use Pi within this repository, it will automatically discover the extension located in the `.pi/extensions/` folder. You can also manually load it or reload your active session by running `/reload` inside the Pi terminal client.
 
+> **Note:** `concur_check_session()` returns exit code **0** (authenticated) or **2** (invalid/expired session). It catches a non-zero exit and reports `false` instead of raising.
+
 ---
 
 ## 🔮 Recommended Future Features & Integrations
 
-1. **Receipt-to-Report Attachment:**
-   * *Description:* Automate uploading local images/PDFs into the **Available Receipts** gallery, then attaching them to specific reports or transaction entries.
-   * *Value:* Fully automates matching receipt files to credit card expenses without manual drag-and-drop.
+1. ~~Receipt-to-Report Attachment~~ *(Already implemented — see `attach-receipt` / `concur_attach_receipt`).*
 2. **Expense Itemization Automation:**
    * *Description:* Parse lodging/hotel folios or receipt text (using OCR/LLM) and programmatically itemize room rates, room taxes, parking, and meals.
    * *Value:* Eliminates tedious manual breakdowns of hotel checkout bills.
@@ -342,24 +384,30 @@ Modern enterprise security often requires MFA or SSO login screens that standard
 ## 📂 Project Directory Structure
 
 ```
-├── .github/
-│   └── workflows/
-│       └── ci.yml          # GitHub Actions CI/CD workflow configuration
-├── Dockerfile              # Docker container definition
-├── docker-compose.yml      # Service orchestration for testing
-├── requirements.txt        # Third-party Python dependencies
-├── .env.example            # Environment variables configuration template
-├── kkw                     # Zsh shell helper script (CLI entry point)
-├── README.md               # Developer-oriented documentation
+├── .env.example                          # Environment variables configuration template
+├── .pi/
+│   └── extensions/
+│       └── concur.ts                     # Pi coding agent extension (13 tools)
+├── Dockerfile                            # Docker container definition
+├── docker-compose.yml                    # Service orchestration for testing
+├── kkw                                   # Zsh shell helper script (CLI entry point)
+├── requirements.txt                      # Third-party Python dependencies
 ├── src/
 │   ├── __init__.py
-│   ├── client.py           # Core Concur API Client Wrapper
-│   ├── browser_client.py   # Playwright Browser Automation Client
-│   └── cli.py              # Command-Line Access Tester Script
-└── tests/
-    ├── __init__.py
-    ├── mock_concur_server.py # Stateful local mock SAP Concur Server
-    ├── test_client.py      # Unit tests using requests mocks
-    ├── test_browser_smoke.py # E2E local browser smoke tests
-    └── test_justification.py # Justification & Classification regression tests
+│   ├── browser_client.py                 # Playwright Browser Automation Client
+│   ├── client.py                         # SAP Concur REST API integration (OAuth2)    
+│   └── cli.py                            # Argument parsing, signal handling, command routing
+├── tests/
+│   ├── __init__.py
+│   ├── mock_concur_server.py             # Stateful local mock SAP Concur Server
+│   ├── smoke_test_reports.py             # Live reports CRUD smoke test (Playwright)
+│   ├── smoke_test_receipts.py            # Live receipts list/delete smoke test
+│   ├── test_allocations_crud.py          # Allocations read/write regression tests
+│   ├── test_browser_smoke.py             # E2E local browser smoke tests against mock server
+│   ├── test_client.py                    # Unit tests using requests mocks
+│   ├── test_justification.py             # Justification & classification regression tests
+│   └── test_transaction_fields_crud.py   # Transaction field (type/purpose/comment) CRUD tests
+└── .github/
+    └── workflows/
+        └── ci.yml                        # GitHub Actions CI/CD workflow configuration
 ```
