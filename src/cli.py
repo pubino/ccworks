@@ -85,6 +85,28 @@ def run_tests():
     # Load .env file
     load_dotenv()
 
+    # Preprocess sys.argv to move global arguments (--output, -v, --verbose) right after the script name.
+    # This prevents argparse unrecognized argument errors when they are placed after subcommands.
+    new_argv = [sys.argv[0]]
+    global_args = []
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        if arg == "--output":
+            if i + 1 < len(sys.argv):
+                global_args.extend([arg, sys.argv[i+1]])
+                i += 2
+            else:
+                global_args.append(arg)
+                i += 1
+        elif arg in ("-v", "--verbose"):
+            global_args.append(arg)
+            i += 1
+        else:
+            new_argv.append(arg)
+            i += 1
+    sys.argv = [new_argv[0]] + global_args + new_argv[1:]
+
     parser = argparse.ArgumentParser(description="SAP Concur API & Browser Access Tool")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed log messages on stderr")
     parser.add_argument("--output", choices=["json", "text"], default="json", help="Output format (default: json for queries)")
