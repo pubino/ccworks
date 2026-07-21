@@ -1138,14 +1138,174 @@ class ConcurBrowserClient:
                 }
 
             except Exception as e:
+                logger.error(f"Failed to update report transactions: {str(e)}")
                 self._take_screenshot(page, "update_transaction_error")
-                raise e
+                return {"success": False, "error": str(e)}
+            finally:
+                browser.close()
+
+    def get_transaction_allocations(self, report_name: str, transaction_index: int, headless: bool = True) -> Dict[str, Any]:
+        """
+        Opens the Allocations modal for a transaction and reads the current allocations.
+        transaction_index is 0-based.
+        """
+        logger.info(f"Getting allocations for transaction {transaction_index} in report '{report_name}'...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless)
+            context = browser.new_context(storage_state=self.session_file, viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+
+            try:
+                page.goto(f"{self.base_url}/nui/expense", timeout=30000)
+                self._wait_for_dashboard(page)
+                
+                # Navigate to report
+                self._open_report_by_name(page, report_name)
+                
+                # Find target row
+                valid_rows = self._get_transaction_rows(page)
+                if transaction_index < 0 or transaction_index >= len(valid_rows):
+                    raise IndexError(f"Transaction index {transaction_index} out of bounds (found {len(valid_rows)} rows).")
+                
+                row = valid_rows[transaction_index]
+                
+                # Click Actions button
+                actions_btn = row.locator("[data-nui-widgets='menu-button-trigger'], .entries-list-actions-button, [aria-label='Actions']").first
+                if actions_btn.count() == 0:
+                    raise RuntimeError("Could not find 'Actions' button for transaction.")
+                
+                actions_btn.click(force=True)
+                page.wait_for_timeout(1000)
+                
+                # Click Allocate
+                allocate_item = page.locator(".menu-item:has-text('Allocate'), .sapMMenuItemText:has-text('Allocate'), [role='menuitem']:has-text('Allocate')").first
+                if allocate_item.count() == 0:
+                    raise RuntimeError("Could not find 'Allocate' menu item.")
+                
+                allocate_item.click()
+                page.wait_for_timeout(2000)
+                
+                # Read allocations from modal
+                allocations = []
+                alloc_list_container = page.locator("#allocations-list, .sapMListUl").filter(visible=True).first
+                if alloc_list_container.count() > 0:
+                    alloc_rows = alloc_list_container.locator("div, .sapMLIB").all()
+                    for r in alloc_rows:
+                        text = r.text_content() or ""
+                        if text.strip() and "No allocations found" not in text:
+                            allocations.append({"raw_text": text.strip()})
+                
+                return {"success": True, "allocations": allocations}
+
+            except Exception as e:
+                logger.error(f"Failed to get allocations: {str(e)}")
+                self._take_screenshot(page, "get_allocations_error")
+                return {"success": False, "error": str(e)}
+            finally:
+                browser.close()
+
+    def add_transaction_allocation(
+        self, 
+        report_name: str, 
+        transaction_index: int, 
+        department: str, 
+        fund: str, 
+        program: Optional[str] = None, 
+        headless: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Adds a new allocation to a transaction.
+        """
+        logger.info(f"Adding allocation to transaction {transaction_index} in report '{report_name}': Dept={department}, Fund={fund}, Prog={program}...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless)
+            context = browser.new_context(storage_state=self.session_file, viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+
+            try:
+                page.goto(f"{self.base_url}/nui/expense", timeout=30000)
+                self._wait_for_dashboard(page)
+                
+                # Navigate to report
+                self._open_report_by_name(page, report_name)
+                
+                # Find target row
+                valid_rows = self._get_transaction_rows(page)
+                if transaction_index < 0 or transaction_index >= len(valid_rows):
+                    raise IndexError(f"Transaction index {transaction_index} out of bounds (found {len(valid_rows)} rows).")
+                
+                row = valid_rows[transaction_index]
+                
+                # Click Actions button
+                actions_btn = row.locator("[data-nui-widgets='menu-button-trigger'], .entries-list-actions-button, [aria-label='Actions']").first
+                if actions_btn.count() == 0:
+                    raise RuntimeError("Could not find 'Actions' button for transaction.")
+                
+                actions_btn.click(force=True)
+                page.wait_for_timeout(1000)
+                
+                # Click Allocate
+                allocate_item = page.locator(".menu-item:has-text('Allocate'), .sapMMenuItemText:has-text('Allocate'), [role='menuitem']:has-text('Allocate')").first
+                if allocate_item.count() == 0:
+                    raise RuntimeError("Could not find 'Allocate' menu item.")
+                
+                allocate_item.click()
+                page.wait_for_timeout(2000)
+                
+                # Click Add button in Allocations modal
+                add_btn = page.locator("[data-nuiexp='allocations-addBtn'], button:has-text('Add'), .sapMBtn:has-text('Add')").filter(visible=True).first
+                if add_btn.count() == 0:
+                    raise RuntimeError("Could not find 'Add' button in Allocations modal.")
+                
+                add_btn.click()
+                page.wait_for_timeout(2000)
+                
+                # Set Department (custom6)
+                self._set_combobox_value(page, "[data-nuiexp='field-custom6'], #custom6", department)
+                
+                # Set Fund (custom7)
+                self._set_combobox_value(page, "[data-nuiexp='field-custom7'], #custom7", fund)
+                
+                # Set Program (custom8) if provided
+                if program:
+                    self._set_combobox_value(page, "[data-nuiexp='field-custom8'], #custom8", program)
+                
+                self._take_screenshot(page, "add_allocation_filled")
+                
+                # Save Add Allocation modal
+                save_add_btn = page.locator("[data-nuiexp='Ct-add-btn'], button:has-text('Save'), .sapMBtn:has-text('Save')").filter(visible=True).first
+                if save_add_btn.count() == 0:
+                    raise RuntimeError("Could not find 'Save' button in Add Allocation modal.")
+                save_add_btn.click()
+                page.wait_for_timeout(2000)
+                
+                # Validate the values are set (briefly check the list in allocations modal)
+                verification_text = f"{department}"
+                if page.locator("#allocations-list, .sapMListUl").filter(has_text=re.compile(re.escape(department), re.I)).count() == 0:
+                     logger.warning(f"Could not verify Department '{department}' in allocations list.")
+                
+                # Save Allocations modal
+                save_alloc_btn = page.locator("[data-nuiexp='allocation-modal-save'], button:has-text('Save'), .sapMBtn:has-text('Save')").filter(visible=True).first
+                if save_alloc_btn.count() == 0:
+                    # Try a more generic save if nuiexp fails
+                    save_alloc_btn = page.locator("button:has-text('Save')").filter(visible=True).last
+                
+                save_alloc_btn.click()
+                page.wait_for_timeout(3000)
+                
+                self._take_screenshot(page, "add_allocation_final")
+                return {"success": True}
+
+            except Exception as e:
+                logger.error(f"Failed to add allocation: {str(e)}")
+                self._take_screenshot(page, "add_allocation_error")
+                return {"success": False, "error": str(e)}
             finally:
                 browser.close()
 
     def delete_report(self, name: str, headless: bool = True) -> Dict[str, Any]:
         """
-        [DELETE] Locates an expense report by its name, clicks delete, and confirms.
+        Deletes a report by name.
         """
         logger.info(f"Deleting report '{name}' via browser (headless={headless})...")
         with sync_playwright() as p:
@@ -3139,3 +3299,330 @@ class ConcurBrowserClient:
                 raise e
             finally:
                 browser.close()
+
+    # --- Private Helpers ---
+
+    def _open_report_by_name(self, page: Any, name: str) -> None:
+        """Helper to find and open a report card by name."""
+        logger.info(f"Opening report '{name}'...")
+        
+        # Wait for content to load
+        try:
+            page.locator(".report-tile, .report-card, .sapMCard, .sapMLIB, .cnqr-report-card, .no-reports").first.wait_for(state="visible", timeout=5000)
+        except:
+            pass
+
+        card_selectors = [".report-tile", ".report-card", ".sapMCard", ".sapMLIB", ".cnqr-report-card"]
+        card = None
+        for selector in card_selectors:
+            loc = page.locator(selector).filter(has_text=name)
+            if loc.count() > 0:
+                card = loc.first
+                break
+        
+        if not card:
+            if page.locator(".no-reports").is_visible():
+                raise FileNotFoundError(f"Dashboard is empty (No reports found). Could not find '{name}'.")
+            raise FileNotFoundError(f"Could not find report '{name}'.")
+
+        card.click()
+        page.wait_for_timeout(3000)
+        self._wait_for_report_view(page)
+
+    def _get_transaction_rows(self, page: Any) -> List[Any]:
+        """Helper to find all valid transaction rows in the current report view."""
+        row_selectors = [
+            ".sapcnqr-data-grid-list__row",
+            ".detail-row", 
+            ".sapMListUl .sapMLIB", 
+            "[class*='expense-item']", 
+            "[class*='expense-row']", 
+            ".sapMCustomListItem",
+            "[role='row']",
+            "[role='listitem']",
+            ".sapMTable tr",
+            "tr.sapMLIB"
+        ]
+        expense_rows_all = page.locator(", ".join(row_selectors)).all()
+        
+        valid_rows = []
+        for r in expense_rows_all:
+            try:
+                text = r.text_content()
+                if not text: continue
+                text = " ".join(text.split()).strip()
+                if len(text) < 10: continue
+                lower_text = text.lower()
+                # Filter out header rows or 'select all' rows
+                if "expense type" in lower_text and "vendor details" in lower_text: continue
+                if "select all rows" in lower_text: continue
+                valid_rows.append(r)
+            except:
+                continue
+        return valid_rows
+
+    def _set_combobox_value(self, page: Any, container_selector: str, value: str, clear: bool = True) -> None:
+        """Helper to handle Concur's searchable combobox fields (Searchable Selects)."""
+        logger.info(f"Setting combobox {container_selector} to '{value}'")
+        container = page.locator(container_selector).filter(visible=True).first
+        if container.count() == 0:
+            raise RuntimeError(f"Combobox container {container_selector} not found or not visible.")
+        
+        # Click to focus
+        container.click(force=True)
+        page.wait_for_timeout(500)
+        
+        if clear:
+            # Try clear button first
+            field_nuiexp = container.get_attribute("data-nuiexp") or ""
+            clear_selector = f"[data-nuiexp='{field_nuiexp}__clear']"
+            clear_btn = page.locator(clear_selector).first
+            if clear_btn.count() > 0 and clear_btn.is_visible():
+                clear_btn.click()
+                page.wait_for_timeout(500)
+            else:
+                # Manual clear
+                page.keyboard.press("Control+A")
+                page.keyboard.press("Backspace")
+        
+        # Type the value
+        page.keyboard.type(value, delay=50)
+        page.wait_for_timeout(2000) # Wait for suggestions
+        
+        # Try to find matching item in suggestion list
+        list_item = page.locator(".sapMStandardListItem, .sapMLIB, [role='listitem'], .sapMComboBoxBaseItem, .suggestion-item, .sapMSelectListItem, .sapMListUl li").filter(has_text=re.compile(f"{re.escape(value)}", re.I)).first
+        
+        if list_item.count() > 0 and list_item.is_visible():
+            list_item.click(force=True)
+            logger.info(f"Selected '{value}' from suggestion list.")
+        else:
+            logger.warning(f"Could not find '{value}' in suggestion list. Pressing Enter.")
+            page.keyboard.press("Enter")
+        
+        page.wait_for_timeout(1000)
+        page.keyboard.press("Tab") # Blur
+
+    def apply_json_updates(self, report_name: str, expenses: list, headless: bool = True) -> dict:
+        """
+        Applies a list of custom transaction updates (e.g. from an edited JSON file)
+        to a draft report in a single, high-performance browser session.
+        """
+        logger.info(f"Applying custom JSON updates to report '{report_name}' (headless={headless})...")
+        results = []
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless)
+            context = browser.new_context(storage_state=self.session_file, viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+            
+            try:
+                page.goto(f"{self.base_url}/nui/expense", timeout=45000)
+                self._wait_for_dashboard(page)
+                
+                # Locate and open the report
+                card_selectors = [".report-tile", ".report-card", ".sapMCard", ".sapMLIB", ".cnqr-report-card"]
+                card = None
+                for selector in card_selectors:
+                    loc = page.locator(selector).filter(has_text=report_name)
+                    if loc.count() > 0:
+                        card = loc.first
+                        break
+                
+                if not card:
+                    raise FileNotFoundError(f"Could not find report '{report_name}'.")
+                    
+                card.click()
+                page.wait_for_timeout(3000)
+                self._wait_for_report_view(page)
+                self._dismiss_modals(page)
+                
+                # Fetch valid rows
+                row_selectors = [
+                    ".sapcnqr-data-grid-list__row",
+                    ".detail-row",
+                    ".sapMListUl .sapMLIB",
+                    "[class*='expense-item']",
+                    "[class*='expense-row']",
+                    ".sapMCustomListItem",
+                    "[role='row']",
+                    "[role='listitem']",
+                    ".sapMTable tr",
+                    "tr.sapMLIB"
+                ]
+                
+                all_rows = page.locator(", ".join(row_selectors)).all()
+                valid_rows = []
+                for r in all_rows:
+                    try:
+                        text = r.text_content()
+                        if not text: continue
+                        text = " ".join(text.split()).strip()
+                        if len(text) < 15: continue
+                        lower_text = text.lower()
+                        if "expense type" in lower_text and "vendor details" in lower_text: continue
+                        if "select all rows" in lower_text: continue
+                        valid_rows.append(r)
+                    except: continue
+                    
+                logger.info(f"Discovered {len(valid_rows)} transaction row(s) in Concur.")
+                
+                for exp in sorted(expenses, key=lambda e: e.get("index", 0)):
+                    idx = exp.get("index") # 0-based
+                    if idx is None or idx < 0 or idx >= len(valid_rows):
+                        logger.warning(f"Index {idx} is out of bounds. Skipping.")
+                        results.append({"index": idx, "success": False, "error": "Index out of bounds"})
+                        continue
+                        
+                    expense_type = exp.get("expense_type") or exp.get("type")
+                    purpose = exp.get("business_purpose", "")
+                    comment = exp.get("comment", "")
+                    vendor = exp.get("vendor", "Unknown")
+                    amount = exp.get("amount", "")
+                    
+                    logger.info(f"Updating Row {idx+1}: {vendor} - {amount}")
+                    
+                    # Selection loop (up to 3 attempts)
+                    selection_successful = False
+                    for attempt in range(3):
+                        # Re-identify rows to prevent staleness
+                        all_rows = page.locator(", ".join(row_selectors)).all()
+                        current_valid_rows = []
+                        for r in all_rows:
+                            try:
+                                text = r.text_content()
+                                if not text: continue
+                                text = " ".join(text.split()).strip()
+                                if len(text) < 15: continue
+                                lower_text = text.lower()
+                                if "expense type" in lower_text and "vendor details" in lower_text: continue
+                                if "select all rows" in lower_text: continue
+                                current_valid_rows.append(r)
+                            except: continue
+                            
+                        if idx >= len(current_valid_rows):
+                            break
+                            
+                        row = current_valid_rows[idx]
+                        row.scroll_into_view_if_needed()
+                        
+                        try:
+                            cb = row.locator(".sapMCb, [type='checkbox']").first
+                            if cb.count() > 0:
+                                cb.click(force=True)
+                            else:
+                                row.click(force=True)
+                            page.wait_for_timeout(2000)
+                            
+                            if page.locator("[data-nuiexp*='field'], input[id*='type'], .sapMInputBaseInner, .recon-type").filter(visible=True).count() > 0:
+                                selection_successful = True
+                                break
+                        except: pass
+                        
+                        # Try Edit button
+                        edit_btn = page.locator("[data-nuiexp='edit-button'], button:has-text('Edit'), .sapMBtn:has-text('Edit')").filter(visible=True).first
+                        if edit_btn.count() > 0 and edit_btn.is_visible():
+                            try:
+                                edit_btn.wait_for_element_state("enabled", timeout=2000)
+                                edit_btn.click(force=True)
+                                page.wait_for_timeout(2000)
+                                selection_successful = True
+                                break
+                            except: pass
+                            
+                    if not selection_successful:
+                        logger.error(f"Failed to open transaction row {idx+1}")
+                        results.append({"index": idx, "success": False, "error": "Failed to open row"})
+                        continue
+                        
+                    # Detail Pane
+                    detail_pane = page.locator("#sapcnqr-layout-side-panel-elements, .sapcnqr-layout-side-panel__elements, .ere__dynamic-main-content").filter(visible=True).first
+                    input_context = detail_pane if detail_pane.count() > 0 else page
+                    
+                    # Fill Expense Type
+                    if expense_type:
+                        type_selectors = [
+                            "select.recon-type",
+                            "select[data-nuiexp*='type']",
+                            "select[id*='type']",
+                            "[data-nuiexp*='type']:not([id*='header'])",
+                            "input[id*='type']:not([id*='header'])",
+                            ".sapMInputBaseInner[id*='type']"
+                        ]
+                        inp_type = input_context.locator(", ".join(type_selectors)).filter(visible=True).first
+                        if inp_type.count() > 0:
+                            try:
+                                tag_name = inp_type.evaluate("el => el.tagName.toLowerCase()")
+                                if tag_name == "select":
+                                    inp_type.select_option(label=expense_type)
+                                else:
+                                    inp_type.click(force=True)
+                                    page.wait_for_timeout(500)
+                                    clear_btn = page.locator("[data-nuiexp='field-expenseType__clear']").first
+                                    if clear_btn.count() > 0 and clear_btn.is_visible():
+                                        clear_btn.click()
+                                        page.wait_for_timeout(500)
+                                    page.keyboard.press("Control+A")
+                                    page.keyboard.press("Backspace")
+                                    
+                                list_item = page.locator(".sapMStandardListItem, .sapMLIB, [role='listitem'], .sapMComboBoxBaseItem, .suggestion-item, .sapMSelectListItem, .sapMListUl li").filter(has_text=re.compile(f"^{re.escape(expense_type)}$", re.I)).first
+                                if list_item.count() > 0 and list_item.is_visible():
+                                    list_item.click(force=True)
+                                else:
+                                    page.keyboard.press("ArrowDown")
+                                    page.wait_for_timeout(500)
+                                    page.keyboard.press("Enter")
+                                page.keyboard.press("Tab")
+                                page.wait_for_timeout(1000)
+                            except Exception as e:
+                                logger.warning(f"Failed to set type: {e}")
+                                
+                    # Fill Business Purpose
+                    if purpose is not None:
+                        inp_purpose = page.locator("[data-nuiexp='field-businessPurpose'], input#businessPurpose").first
+                        if inp_purpose.count() > 0:
+                            inp_purpose.click(force=True)
+                            inp_purpose.fill("")
+                            inp_purpose.fill(purpose)
+                            
+                    # Fill Comment
+                    if comment is not None:
+                        inp_comment = page.locator("[data-nuiexp='field-comment'], textarea#comment").first
+                        if inp_comment.count() > 0:
+                            inp_comment.click(force=True)
+                            inp_comment.fill("")
+                            inp_comment.fill(comment)
+                            
+                    # Save
+                    save_btn_selectors = [
+                        "[data-nuiexp='exp-save-expense']",
+                        "button[data-nuiexp='exp-save-expense']",
+                        "button:has-text('Save Expense')",
+                        "button.sapMBtn:has-text('Save')",
+                        "button:has-text('Save')",
+                        "button.recon-save-btn"
+                    ]
+                    saved = False
+                    for sel in save_btn_selectors:
+                        btn = input_context.locator(sel).first
+                        if btn.count() > 0 and btn.is_visible():
+                            btn.click()
+                            page.wait_for_timeout(3000)
+                            saved = True
+                            break
+                            
+                    if saved:
+                        logger.info(f"Successfully updated and saved Row {idx+1}.")
+                        results.append({"index": idx, "success": True})
+                    else:
+                        logger.warning(f"Could not find Save button for Row {idx+1}. Closing pane.")
+                        page.keyboard.press("Escape")
+                        page.wait_for_timeout(1000)
+                        results.append({"index": idx, "success": False, "error": "Could not find Save button"})
+                
+                return {"success": True, "results": results}
+                
+            except Exception as e:
+                logger.error(f"Error applying JSON updates: {e}")
+                raise
+            finally:
+                browser.close()
+

@@ -142,6 +142,14 @@ def run_tests():
     p_alloc.add_argument("report_name", type=str, help="Name of the expense report")
     p_alloc.add_argument("--filter-view", type=str, help="Dropdown filter to look inside")
 
+    # Command: add-allocation
+    p_add_alloc = subparsers.add_parser("add-allocation", help="Add a new chartstring allocation to a transaction")
+    p_add_alloc.add_argument("report_name", type=str, help="Name of the expense report")
+    p_add_alloc.add_argument("index", type=int, help="1-based index of the transaction row")
+    p_add_alloc.add_argument("--dept", type=str, required=True, help="Department (e.g. '(25605) ORF-Technical Support')")
+    p_add_alloc.add_argument("--fund", type=str, required=True, help="Fund (e.g. '(A0001) General Fund')")
+    p_add_alloc.add_argument("--prog", type=str, help="Program (e.g. '(P999) Research')")
+
     # Command: card-details
     p_card_det = subparsers.add_parser("card-details", help="Get detailed view of a card transaction by merchant or ID")
     p_card_det.add_argument("merchant_or_id", type=str, help="Merchant name or transaction ID")
@@ -188,6 +196,10 @@ def run_tests():
     # Command: submit-report
     p_sub = subparsers.add_parser("submit-report", help="Submit an expense report for approval")
     p_sub.add_argument("report_name", type=str, help="Name of the expense report to submit")
+
+    # Command: apply-json
+    p_apply = subparsers.add_parser("apply-json", help="Apply custom edited JSON report-details to an expense report")
+    p_apply.add_argument("json_path", type=str, help="Path to the edited JSON file")
 
     args = parser.parse_args()
 
@@ -681,6 +693,37 @@ def run_tests():
                 print(json.dumps({"status": "error", "message": str(e)}))
     
         # ----------------------------------------------------
+        # Flow J3: Add Allocation
+        # ----------------------------------------------------
+        elif args.command == "add-allocation":
+            try:
+                with Spinner(f"Adding allocation to index {args.index} in '{args.report_name}'..."):
+                    browser_client = ConcurBrowserClient()
+                    res = browser_client.add_transaction_allocation(
+                        report_name=args.report_name,
+                        transaction_index=args.index - 1, # Convert to 0-based
+                        department=args.dept,
+                        fund=args.fund,
+                        program=args.prog,
+                        headless=True
+                    )
+                
+                if res.get("success"):
+                    summary = f"\n[SUCCESS] Allocation added to transaction {args.index} in '{args.report_name}'!\n"
+                    summary += f"  - Dept: {args.dept}\n"
+                    summary += f"  - Fund: {args.fund}\n"
+                    if args.prog:
+                        summary += f"  - Prog: {args.prog}\n"
+                    summary += "=" * 60
+                    output_result(res, summary)
+                else:
+                    output_result(res)
+            except ConcurSessionExpiredError as e:
+                handle_session_expired(e)
+            except Exception as e:
+                print(json.dumps({"status": "error", "message": str(e)}))
+    
+        # ----------------------------------------------------
         # Flow K: List Card Transactions
         # ----------------------------------------------------
         elif args.command == "list-cards":
@@ -1025,6 +1068,48 @@ def run_tests():
             except Exception as e:
                 if args.output == "text":
                     print(f"\n[ERROR] Failed to submit report: {str(e)}\n" + "=" * 60)
+                else:
+                    print(json.dumps({"status": "error", "message": str(e)}))
+                sys.exit(1)
+
+        # ----------------------------------------------------
+        # Flow T: Apply JSON Updates
+        # ----------------------------------------------------
+        elif args.command == "apply-json":
+            json_path = args.json_path
+            if args.output == "text":
+                print("=" * 60)
+                print(f"     SAP Concur Apply JSON Updates: '{json_path}'")
+                print("=" * 60)
+            try:
+                if not os.path.exists(json_path):
+                    raise FileNotFoundError(f"JSON file not found: {json_path}")
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+                
+                report_name_val = data.get("report_name")
+                expenses = data.get("expenses", [])
+                
+                if not report_name_val:
+                    raise KeyError("Missing 'report_name' in JSON file.")
+                
+                if args.output == "text":
+                    print(f"[*] Report Name: {report_name_val}")
+                    print(f"[*] Transactions: {len(expenses)}")
+                    print("-" * 60)
+                    
+                with Spinner(f"Applying JSON updates to report '{report_name_val}' headlessly..."):
+                    browser_client = ConcurBrowserClient()
+                    res = browser_client.apply_json_updates(report_name=report_name_val, expenses=expenses, headless=True)
+                
+                summary = f"\n[SUCCESS] Custom JSON updates successfully applied to Concur!\n"
+                summary += "=" * 60
+                output_result(res, summary)
+            except ConcurSessionExpiredError as e:
+                handle_session_expired(e)
+            except Exception as e:
+                if args.output == "text":
+                    print(f"\n[ERROR] Failed to apply JSON updates: {str(e)}\n" + "=" * 60)
                 else:
                     print(json.dumps({"status": "error", "message": str(e)}))
                 sys.exit(1)

@@ -36,6 +36,7 @@ usage() {
     echo "  update-transaction \"Report\" [indices...] [args...] Update fields of transaction(s) inside a report" >&2
     echo "  update-report \"Report\" [args...] Update report header fields (name, purpose, comment)" >&2
     echo "  submit-report \"Report\" Submit an expense report for approval" >&2
+    echo "  apply-json \"file.json\" Apply custom edited JSON report-details back to Concur" >&2
     exit 1
 }
 
@@ -304,6 +305,15 @@ case "$CMD" in
         fi
         ensure_venv
         python3 src/cli.py submit-report "$2"
+        ;;
+    apply-json)
+        if [ $# -lt 2 ]; then
+            echo "Error: Please specify the JSON file path." >&2
+            echo "Usage: ./kkw apply-json \"path/to/edited.json\"" >&2
+            exit 1
+        fi
+        ensure_venv
+        python3 src/cli.py apply-json "$2"
         ;;
     *)
         usage
