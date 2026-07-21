@@ -244,6 +244,47 @@ You can read or write individual transaction fields (Expense Type, Business Purp
   ./ccworks update-transaction "Transaction Report" 1 --comment ""
   ```
 
+* **Bulk JSON Updates & Receipt Uploads (apply-json):**
+  You can export report details to a JSON file, edit it locally (manually or programmatically), and apply all updates—including bulk receipt file uploads—back to Concur in **one single, high-performance browser session**.
+
+  ```bash
+  # 1. Export deep details of a report to a local JSON file
+  ./ccworks report-details "Statement Report 06/16 - 07/31" --deep --output json > report.json
+
+  # 2. Edit report.json locally (see JSON schema below)
+  # 3. Apply all changes and upload receipts headlessly in a single run
+  ./ccworks apply-json report.json
+  ```
+
+  #### JSON Expense Schema:
+  Within the `"expenses"` list of your edited JSON file, you can specify:
+  * `expense_type` (Optional): The category/classification name (e.g., `"Software"`).
+  * `business_purpose` (Optional): Business justification.
+  * `comment` (Optional): Custom transaction notes.
+  * `receipt_file_path` / `receipt_file` (Optional): Fully absolute or relative path to a local receipt file (PDF/PNG/JPEG) to upload and attach to this transaction. **This field is entirely optional**—if omitted or set to `null`/empty, no upload is performed and only text fields are updated.
+
+  Example snippet of a modified `report.json`:
+  ```json
+  {
+    "report_name": "Statement Report 06/16 - 07/31",
+    "expenses": [
+      {
+        "index": 0,
+        "expense_type": "Software",
+        "business_purpose": "API credits for development",
+        "comment": "Antigravity billing",
+        "receipt_file_path": "/Users/bino/Downloads/invoice_anthropic.pdf"
+      },
+      {
+        "index": 1,
+        "expense_type": "Computer Peripherals (OIT use only)",
+        "business_purpose": "External monitor for workstation",
+        "comment": "Skipping receipt file path, only updating text fields."
+      }
+    ]
+  }
+  ```
+
 * **Verify / Read details (Read):**
   ```bash
   # Use --deep to see full line-item justifications
