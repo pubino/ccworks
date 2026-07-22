@@ -78,6 +78,53 @@ class Spinner:
             self.thread.join()
 
 
+def _command_reference() -> str:
+    """Hand-formatted command reference shown in `ccworks --help` / bare `ccworks`."""
+    rows = [
+        ("Setup / diagnostics", None),
+        ("api-test",            "Run the API client test suite (requires .env with OAuth creds)"),
+        ("login",               "Launch a headed browser for manual Concur authentication"),
+        ("check-session",       "Check whether the saved browser session is still valid"),
+        ("Reports (read)", None),
+        ("query",               "List current draft reports and available receipts"),
+        ("list-old-reports",    "List historical/old expense reports [--filter-view]"),
+        ("report-details",      "Detailed view of a report by name [--deep] [--filter-view]"),
+        ("allocations",         "Show chartstring allocations for a report [--filter-view]"),
+        ("Reports (write)", None),
+        ("create-report",       "Create a draft expense report [--name --purpose --comment --headed]"),
+        ("update-report",       "Update a report's header fields (name/purpose/comment/justification)"),
+        ("update-transaction",  "Update fields on transactions inside a report (by index)"),
+        ("add-allocation",      "Add a chartstring allocation to a transaction (--dept --fund [--prog])"),
+        ("attach-receipt",      "Attach a local receipt file to a transaction (--merchant --receipt-path)"),
+        ("reconcile",           "Reconcile transactions from rules JSON [--reconcile-rules] [--submit]"),
+        ("submit-report",       "Submit an expense report for approval"),
+        ("apply-json",          "Apply an edited report-details JSON back to Concur"),
+        ("delete-report",       "Delete a specific expense report by name"),
+        ("delete-all-reports",  "Delete every draft expense report"),
+        ("Cards", None),
+        ("list-cards",          "List credit-card transactions [--filter-view]"),
+        ("card-details",        "Detailed view of a card transaction [--filter-view]"),
+        ("Receipts", None),
+        ("delete-all-receipts", "Delete every available receipt"),
+        ("Delegates", None),
+        ("add-delegate",        "Add an expense delegate [--delegate-perms prepare submit approve]"),
+        ("remove-delegate",     "Remove an expense delegate"),
+        ("Nuclear", None),
+        ("nuke",                "Delete ALL draft reports AND all available receipts"),
+    ]
+    lines = ["Commands:"]
+    for name, desc in rows:
+        if desc is None:
+            lines.append("")
+            lines.append(f"  {name}:")
+        else:
+            lines.append(f"    {name:<21} {desc}")
+    lines.append("")
+    lines.append("Run `ccworks <command> --help` for per-command flags.")
+    lines.append("Environment: CCWORKS_STATE_DIR overrides ~/Library/Application Support/ccworks.")
+    return "\n".join(lines)
+
+
 def run_tests():
     # Load .env file
     load_dotenv()
@@ -104,11 +151,20 @@ def run_tests():
             i += 1
     sys.argv = [new_argv[0]] + global_args + new_argv[1:]
 
-    parser = argparse.ArgumentParser(description="SAP Concur API & Browser Access Tool")
+    epilog = _command_reference()
+    parser = argparse.ArgumentParser(
+        prog="ccworks",
+        description="SAP Concur API & Browser Access Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
+        usage="ccworks [-h] [-v] [--output {json,text}] <command> [args...]",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed log messages on stderr")
     parser.add_argument("--output", choices=["json", "text"], default="json", help="Output format (default: json for queries)")
 
-    subparsers = parser.add_subparsers(dest="command", required=True, help="Subcommands")
+    # `required=False` so bare `ccworks` prints our formatted help below
+    # instead of the raw argparse "the following arguments are required" error.
+    subparsers = parser.add_subparsers(dest="command", required=False, metavar="<command>", help=argparse.SUPPRESS)
 
     # Command: api-test
     subparsers.add_parser("api-test", help="Run the API client test suite")
@@ -221,6 +277,12 @@ def run_tests():
     p_apply.add_argument("json_path", type=str, help="Path to the edited JSON file")
 
     args = parser.parse_args()
+
+    # Bare `ccworks` (or `ccworks -v` etc.) with no subcommand: show the
+    # friendly command reference instead of argparse's terse error.
+    if args.command is None:
+        parser.print_help(sys.stderr)
+        sys.exit(0)
 
     # Configure logging based on verbosity
     log_level = logging.INFO if args.verbose else logging.WARNING
