@@ -17,3 +17,9 @@ screenshots/
 
 # System files
 .DS_Store
+
+# Agent files and temporary directories
+.ralph/
+scratch/
+ci_logs.txt
+
