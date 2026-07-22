@@ -14,13 +14,13 @@ export default function (pi: ExtensionAPI) {
     // Attempt to use current directory or locate run.sh in parent directories
     let dir = process.cwd();
     while (dir && dir !== path.parse(dir).root) {
-      const launcher = path.join(dir, "kkw");
+      const launcher = path.join(dir, "ccworks");
       if (fs.existsSync(launcher)) {
         return launcher;
       }
       dir = path.dirname(dir);
     }
-    return "./kkw"; // Fallback to relative
+    return "./ccworks"; // Fallback to relative
   };
 
   const runCommand = async (args: string[]): Promise<string> => {
